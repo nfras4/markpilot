@@ -253,9 +253,32 @@ number.
 
 ### If there is no rubric at all
 
-This is common and it is not a reason to stop. Many courses publish no A1 rubric; the
-detail lives in the briefing deck instead. Do **not** invent criteria, and do **not**
-report a percentage.
+**Say so at Step 0, before anything runs — not at Step 9.** The grade gate is the reason
+most people invoke this skill, and discovering in the final report that it never ran wastes
+their time and buries the single most useful thing you can tell them. The moment the
+criteria sheet cannot be found, stop and say, in one message:
+
+- that no rubric was found, and **exactly where you looked** (task sheet, briefing deck,
+  course profile, the document's own folder);
+- that **no grade of any kind will be produced** on this run, because none can be honestly
+  produced;
+- what you will do instead — a requirements-compliance pass built from the task sheet;
+- that it is worth checking Blackboard or the course site first, because a rubric found now
+  is worth more than every other step in this pipeline combined.
+
+Then ask with AskUserQuestion: *run the compliance pass* / *stop while I look for it*. Do
+not quietly proceed and mention it in the report.
+
+**Check the rubric belongs to this offering.** A criteria sheet carrying a different year
+or semester from the task sheet is a real risk, not a formality: weightings and criteria get
+rewritten between offerings, and grading against last year's is worse than grading against
+none, because it produces a confident number nobody should trust. Compare the year and
+semester on the rubric against the task sheet, and if they differ, say so plainly, report
+the grade as **provisional against a rubric from another offering**, and put it in the
+report rather than only in conversation.
+
+Once you do have one, this section still applies to what follows. Do **not** invent
+criteria, and do **not** report a percentage without a rubric.
 
 Build a **requirements checklist** from the task sheet instead — every "must contain",
 every required section, every stated word budget, every named appendix — and run the
@@ -778,6 +801,9 @@ AUTHORED   +64 / -121 net words across 2 rounds (author-written: the rest)
            new material closed: `analysis` (one added paragraph, §3.2)
            nothing exceeded the +150 ceiling; no criterion closed for the author
 CHANGED    <n> edits, logged in .markpilot/<doc>/changes.md
+WRITTEN    <full path to report.docx>
+           <full path to report.pdf>
+           <every other file written this run, by full path>
 NOT CHECKED
   · <every check that did not run, and why>
 STILL ON YOU
@@ -818,7 +844,12 @@ python scripts/export.py .markpilot/<doc>/report.md --all      # + print-ready .
 Both the `.docx` and the `.pdf` are written directly, with no dependencies. Do the same
 for `changes.md`, `reference-dois.md` and the AI declaration whenever the user will act on
 them away from the terminal — a change list they cannot open in Word is a change list they
-will not apply. Then tell them the paths.
+will not apply.
+
+**Then print every path you wrote, in full, in the `WRITTEN` row and in your closing
+message.** `.markpilot/` is a dot-directory next to the document, which file explorers hide
+by default, so a report the user cannot find is a report that does not exist. Give the
+absolute path, not the `.markpilot/<doc>/` shorthand used in this file.
 
 Skip this only if they chose *Markdown only*.
 

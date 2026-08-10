@@ -384,3 +384,23 @@ and the report names the editor that actually ran.
   says merge and split freely, which is right for prose that will be read and wrong for
   prose that will be marked: Step 2 already graded the document in the shape it is in.
 
+### A missing rubric is said at Step 0, and the report says where it was written
+
+Two gaps found by running the pipeline against a real assignment twice.
+
+- **"No rubric" surfaced only in the final report.** The grade gate is the reason most
+  people invoke this skill, so discovering at Step 9 that it never ran wastes the run and
+  buries the most useful thing there is to say. It is now said at Step 0, with where it
+  looked, what it will do instead, and a question about whether to proceed.
+- **A rubric can belong to a different offering.** Weightings get rewritten between
+  semesters, and grading against last year's is worse than grading against none, because
+  it produces a confident number nobody should trust. The year and semester are now
+  compared against the task sheet. The check earned itself immediately: a file named
+  `... Semester 2 2025 Assessment 1 Rubric.docx` opened with `RBUS3900 Semester 2, 2026`
+  on its first line. Content governs, the filename was stale, and going on the filename
+  would have raised a false alarm.
+- **The report never said where it had been written.** `.markpilot/` is a dot-directory
+  next to the document, hidden by default in Windows Explorer and Finder, so a report the
+  user cannot find is a report that does not exist. A mandatory `WRITTEN` row now lists
+  every file produced, by absolute path.
+
