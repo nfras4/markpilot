@@ -34,6 +34,51 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Third review round
+
+**New:** `scripts/e2e.py` — 10 whole-document cases, run by `selftest.py`. Three review
+rounds running, the defects that got through were invisible to unit cases because they
+only appear when a whole script reads a whole file, and three of them were regressions
+introduced by a fix for something else. Unit tests could not see that class; these can.
+
+Five more exit-0-on-unverified paths, three of them regressions from the previous round:
+
+- **A numbered reference list made `citecheck` abandon author-date checking.** `--style
+  apa7` was overridden by inference whenever the body contained any `[n]` and the list was
+  numbered — both routine. It printed "OK - every number resolves both ways" at exit 0 on a
+  document with two orphan citations and an uncited reference, saying nothing about what it
+  had skipped. An explicitly named style is now never overridden.
+- **`quotecheck` manufactured quotations out of apostrophes.** A pair of straight
+  apostrophes ("the board's … the regulator's") formed a "quotation", so a document with
+  none reported three to verify at exit 0 — and in `--claims` mode produced a fabricated
+  NOT FOUND that would have discarded a valid grading pass. The straight-single-quote pair
+  is gone.
+- **`quotecheck` dropped over-long spans before forming the denominator**, so a fabricated
+  471-character quote made a run report "1/1 quoted spans appear" at exit 0. Skipped spans
+  are now counted and reported.
+- **Every Chicago and MLA reference was classified as grey literature** and never looked
+  up: the personal-name guard required an initial ("Smith, J."), so styles that spell the
+  given name out fell through to the acronym branch.
+- **The two-line-caption fix carried an ordinary body sentence** as a missing caption,
+  turning a real finding into a pass. The carried line must now look like a title.
+
+Also: the one `load()` failure path missed by the `die()` refactor still exited `1` while
+printing "do NOT treat this as a pass"; `--budget` without `--count` silently did nothing;
+one heading could satisfy two budget lines and be counted twice; `looks_like_reference`
+treated length alone as evidence, swallowing the document tail; the unstyled-refs fix had
+been applied to the word count but not to `citecheck`/`linkcheck`, so the scripts disagreed
+about the same document; `_html_paras` never set `in_table` at all, leaving HTML and PDF
+dumps hijackable; a missing `--source` was masked by a style-tell exit 1; and `linkcheck`'s
+year check was satisfied by digits inside a DOI suffix.
+
+**The "refines, does not write" claim is now enforced rather than asserted.** It was the
+only load-bearing prohibition with no mechanical check behind it, and the pipeline actively
+pushed against it: Step 2a names "an original position" as the top band, Step 2c says close
+the highest-weighted gap, and the loop stops on the score. Every change now records its word
+delta, the report carries a mandatory `AUTHORED` row, a +150 net-word ceiling stops and asks
+the author, and a criterion flagged author-input-required cannot be quietly closed by a
+later round.
+
 ### Second review round — everything the reviewers found
 
 **New:** `quotecheck.py`. The grader brief demands a quoted span for every score, but

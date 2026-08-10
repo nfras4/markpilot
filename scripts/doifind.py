@@ -178,8 +178,15 @@ def looks_corporate(entry):
     a leading "[12]" defeated the anchor."""
     head = re.split(r"\(\s*(?:1[6-9]|20)\d{2}", entry)[0]
     head = re.sub(r"^\s*(?:\[\d+\]|\d+[.)])\s*", "", head).strip()   # [12] / 12.
-    if re.search(r"[A-Z][a-z]+,\s*[A-Z]\.", head):     # "Smith, J." -> personal
+    # Personal-name forms across styles. Requiring an INITIAL ("Smith, J.") missed
+    # every style that spells the given name out - Chicago's "Smith, John." and
+    # MLA's "Smith, John Robert." - so "Smith" then fullmatched the acronym branch
+    # below and every Chicago/MLA journal article was declared grey literature and
+    # never looked up.
+    if re.search(r"[^\W\d_][\w'’\-]+,\s*(?:[A-Z]\.|[A-Z][a-z]+)", head, re.UNICODE):
         return False
+    if re.search(r"^[A-Z]\.\s*[A-Z]?\.?\s*[^\W\d_][\w'’\-]+", head, re.UNICODE):
+        return False                                   # IEEE "J. Smith"
     if CORPORATE.match(head):
         return True
     name = re.split(r"[.,]", head)[0].strip()

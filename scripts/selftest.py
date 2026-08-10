@@ -15,6 +15,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import e2e  # noqa: E402
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -285,7 +286,13 @@ def main():
         if got != expected:
             fails.append(("ref_key", entry, got, expected))
 
-    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES) + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF)
+    # End-to-end: whole script, whole document, exit code. Unit cases are blind to
+    # the regression class that has now bitten three review rounds running.
+    fails.extend(e2e.run())
+
+    total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
+             + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + len(e2e.CASES))
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

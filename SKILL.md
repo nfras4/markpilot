@@ -11,7 +11,9 @@ description: |
   AI-use policy. Trigger on: "markpilot", "mark this", "grade this against the
   rubric", "is this ready to submit", "check this assignment", "will this get an HD",
   "pre-submission check", "run the rubric over this", or when handed a draft plus a
-  criteria sheet.
+  criteria sheet. Refines an EXISTING draft - it never generates an assignment,
+  and it flags anything needing the author's own position or evidence rather
+  than inventing it.
 argument-hint: "[document] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill]"
 allowed-tools:
   - Read
@@ -33,6 +35,30 @@ A draft is finished when an independent marker, holding the criteria sheet, cann
 5% to take off it. Markpilot runs that check: it hands the work to graders who did not
 write it, acts on what they find, re-checks with graders who have not seen the earlier
 rounds, then clears the mechanical failures that sink otherwise-strong submissions.
+
+## What this is, and what it is not
+
+**Markpilot refines a draft you have already written. It does not write one.**
+
+It needs an existing document at Step 0 and stops if there is none — there is no "generate
+the assignment" path anywhere in this pipeline, by design. What it does is close the gap
+between a draft and the rubric it will be marked against: find where a criterion is not
+met, say so specifically, and tighten what is already there.
+
+The line it will not cross: where closing a gap would need **a position the author has not
+taken, evidence they have not gathered, or a source they have not read**, it flags that as
+author-input-required and moves on. It does not supply the argument. Step 2c says this
+plainly and every fix pass is bound by it, because the difference between refining someone's
+work and writing it for them is exactly that line.
+
+It also will not invent a source, a statistic, a quote or a page number; will not adjust a
+data point to tidy a chart; and will not help conceal AI use where a declaration is
+required. Those are not configurable.
+
+Used as intended, the AI assistance here is drafting-and-editing support of the kind most
+institutions permit **and require you to declare** — which is what Step 8 is for. Whether
+that is allowed in your course is your course's call, not this tool's, and Step 8 goes and
+reads the policy rather than assuming.
 
 ## Two rules that govern everything below
 
@@ -87,6 +113,7 @@ script: nothing was read, so nothing can be claimed. What each `2` means specifi
 | `linkcheck` | something needs a human (BLOCKED/TIMEOUT/SSL/NO-DNS/REDIRECTED/SOFT-404), **or** most of the reference list carried no identifier |
 | `figcheck` | no figures detected, or a `--source` path was missing |
 | `doifind` | entries left unmatched, or the whole list was grey literature |
+| `quotecheck` | no quoted spans to compare, or some were too long/short to check |
 | `doctext` | the file could not be read (it is an extractor; it does not judge) |
 
 **`linkcheck` exiting `2` is the normal case for any document citing a paywalled
@@ -259,11 +286,38 @@ Work the gaps by `weight × band-gap`, highest cost first.
 - Fix the substance before the sentences. A criterion sitting low because the analysis
   is descriptive is not fixed by better wording.
 - Preserve the author's voice and argument. Where closing a gap needs a position they
-  have not taken or evidence they have not gathered, **do not invent it** — flag it as
-  author-input-required.
+  have not taken, evidence they have not gathered, or a source they have not read,
+  **do not invent it** — flag it as author-input-required and move on. This is the line
+  between refining the author's work and writing it for them, and it is not negotiable by
+  flag or by how close the score is to the target.
 - Never invent a source, statistic, quote or page number.
-- Log every change to `.markpilot/<docname>/changes.md` with the criterion it targets.
+- Log every change to `.markpilot/<docname>/changes.md` with the criterion it targets
+  **and its word delta** — `+18 / −4`, per change. The running total is what makes the
+  next rule checkable instead of aspirational.
 - Under `--report-only`, produce the change list and stop.
+
+### The authorship ceiling — this is the enforcement, not the prose above
+
+Tightening someone's sentence and writing their argument are both "edits", and an edit
+count cannot tell them apart. So:
+
+1. **Track net words authored** across all rounds: additions minus deletions, from
+   `changes.md`. Carry it into the Step 9 `AUTHORED` row, which is mandatory.
+2. **At +150 net words, stop and ask.** Use AskUserQuestion: show which criteria the new
+   material closed and what it says, and let the author accept it, rewrite it themselves,
+   or drop it. Do not resume adding until they answer.
+3. **A criterion flagged author-input-required stays flagged.** Later rounds may not
+   quietly close it by writing the missing position. If the author has not supplied it,
+   it is still open at Step 9 and the score is reported with that criterion short.
+4. **If the reported score depends on agent-written material, say so in the report** —
+   name the criteria concerned on the `AUTHORED` row.
+
+The failure this prevents is specific and easy to walk into: Step 2a tells you the top
+band wants "an original position", Step 2c tells you to close the highest-weighted gap,
+and the loop only stops when the score clears the target. Writing 400 words of evaluation
+using sources the author already cited breaks none of the individual prohibitions and
+lands squarely on the wrong side of the line the skill claims to hold. The ceiling is
+what makes the claim true.
 
 ### 2d. Re-grade with fresh graders
 
@@ -466,8 +520,10 @@ block quotes that could be paraphrased.
 
 **If cutting touches material Step 2c added**, you are removing what the graders
 rewarded. Re-run the full three-grader gate afterwards, not the single regression grader
-at Step 7. This collision is built into the order of operations — Step 2c adds, Step 4
-measures — so expect it rather than discovering it.
+at Step 7. This collision is built into the order of operations — Step 2c may add, Step 4
+measures — so expect it rather than discovering it. If the additions that pushed it over
+were agent-written rather than the author's, cutting them is the right resolution, not
+re-grading around them.
 
 **Termination.** Steps 4, 6 and 7 each change the word count, so they can oscillate. Cap
 the whole cut-and-regrade cycle at **two** passes. If the document is still over the limit
@@ -607,6 +663,9 @@ PROSE      humanised · 12 tells removed
            `evidence` dropped D→C, the two sentences carrying it restored
 AI POLICY  declaration required (task sheet §4) → drafted, on the coversheet
 
+AUTHORED   +64 / -121 net words across 2 rounds (author-written: the rest)
+           new material closed: `analysis` (one added paragraph, §3.2)
+           nothing exceeded the +150 ceiling; no criterion closed for the author
 CHANGED    <n> edits, logged in .markpilot/<doc>/changes.md
 NOT CHECKED
   · <every check that did not run, and why>
@@ -655,6 +714,7 @@ Written under `.markpilot/<docname>/`: `rubric.md`, `constraints.md`, `text.txt`
 `grades-round-N-<stance>.md`, `draft-round-N.txt`, `budget.txt`, `links.json`,
 `doifind.json`, `changes.md`, `report.md`.
 
-`scripts/selftest.py` guards the parsing regexes, which are the fragile part
+`scripts/selftest.py` (which also runs `scripts/e2e.py`) guards the parsing regexes,
+which are the fragile part
 of this skill — several of those cases are defects that reached working code. Run it
 after editing any regex in `doctext.py`, `citecheck.py` or `figcheck.py`.

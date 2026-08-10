@@ -40,9 +40,14 @@ from doctext import load, die  # noqa: E402
 
 # Straight and curly pairs, plus the guillemets and low-9 forms that turn up when
 # a .docx round-trips through a PDF.
-QUOTE_PAIRS = [('"', '"'), ('“', '”'), ('‘', '’'),
-               ("'", "'"), ('«', '»'), ('„', '“')]
+# NOTE the absence of ("'", "'"): a pair of straight apostrophes is not a
+# quotation. Ordinary possessives ("the board's ... the regulator's") produced
+# fabricated quotations at exit 0 on documents containing none, and in --claims
+# mode produced a fabricated NOT FOUND that would have discarded a valid grading
+# pass. Missing a straight-single-quoted quotation is the safer error.
+QUOTE_PAIRS = [('"', '"'), ('“', '”'), ('‘', '’'), ('«', '»'), ('„', '“')]
 MIN_WORDS = 4          # shorter spans are terms of art, not quotations
+MAX_CHARS = 2000       # block quotes run long; see extract_quotes' skip counter
 
 
 def canon(s):
@@ -57,16 +62,24 @@ def canon(s):
 
 
 def extract_quotes(text):
-    out = []
+    """Returns (quotes, skipped) - skipped is what was seen but not checked.
+
+    A span longer than the cap used to match nothing at all, so it never entered
+    the denominator: a fabricated 471-character quote made a run report
+    "1/1 quoted spans appear" at exit 0. Anything dropped is now counted and
+    reported, because a silent skip is the same failure as a silent pass."""
+    out, skipped = [], 0
     for op, cl in QUOTE_PAIRS:
-        if op == cl:
-            pat = re.escape(op) + r"([^" + re.escape(op) + r"]{8,400})" + re.escape(cl)
-        else:
-            pat = re.escape(op) + r"([^" + re.escape(cl) + r"]{8,400})" + re.escape(cl)
-        for m in re.finditer(pat, text):
+        body = r"([^" + re.escape(cl) + r"]{8,%d})" % MAX_CHARS
+        for m in re.finditer(re.escape(op) + body + re.escape(cl), text):
             q = m.group(1).strip()
             if len(q.split()) >= MIN_WORDS:
                 out.append(q)
+            else:
+                skipped += 1
+        # spans that blew the cap entirely
+        over = r"([^" + re.escape(cl) + r"]{%d,})" % (MAX_CHARS + 1)
+        skipped += len(re.findall(re.escape(op) + over + re.escape(cl), text))
     # de-duplicate, preserve order
     seen, uniq = set(), []
     for q in out:
@@ -74,10 +87,13 @@ def extract_quotes(text):
         if k and k not in seen:
             seen.add(k)
             uniq.append(q)
-    return uniq
+    return uniq, skipped
 
 
 def read_text(path):
+    if path.lower().endswith(".pdf"):
+        die("error: this script does not read PDF. Extract the text first "
+            "(see the skill's Step 0).")
     if path.lower().endswith((".docx", ".md", ".txt", ".html", ".htm", ".rtf")):
         return "\n".join(p.text for p in load(path))
     with open(path, "rb") as f:
@@ -106,8 +122,11 @@ def main():
         print("COULD NOT CHECK - the document produced no text.")
         return 2
 
+    if args.list and args.claims:
+        die("error: pass --claims or --list, not both - they answer different "
+            "questions, and running one silently discards the other.")
     if args.list or not args.claims:
-        quotes = extract_quotes(read_text(args.document))
+        quotes, skipped = extract_quotes(read_text(args.document))
         print(f"DIRECT QUOTATIONS  -  {len(quotes)} found")
         if not quotes:
             print("  None detected. If the document quotes sources, the parser did not")
@@ -117,12 +136,15 @@ def main():
         print("  number in the citation. Nothing here verifies that; it lists the work.\n")
         for i, q in enumerate(quotes, 1):
             print(f"  {i:>3}. \"{q[:100]}{'...' if len(q) > 100 else ''}\"")
+        if skipped:
+            print(f"\n  !! {skipped} quoted span(s) were too short or too long to check")
+            print("     and are NOT in the count above. Look at those by hand.")
         print(f"\n  {len(quotes)} to verify. Record how many you checked in the report.")
-        return 0
+        return 2 if skipped else 0
 
     if not os.path.exists(args.claims):
         die(f"error: no such claims file: {args.claims}")
-    claims = extract_quotes(read_text(args.claims))
+    claims, skipped = extract_quotes(read_text(args.claims))
     print(f"QUOTED EVIDENCE  -  {len(claims)} quoted spans in {os.path.basename(args.claims)}")
     if not claims:
         print("  COULD NOT CHECK - no quoted spans found in the claims file.")
@@ -141,6 +163,10 @@ def main():
         print(f"  [{mark:^11}] \"{q[:88]}{'...' if len(q) > 88 else ''}\"")
 
     print(f"\n  {len(claims) - len(missing)}/{len(claims)} quoted spans appear in the document.")
+    if skipped:
+        print(f"  !! {skipped} further span(s) were too short or too long to check.")
+        print("     They are NOT in the ratio above - a silently skipped span is the")
+        print("     same failure as a silently passed one.")
     if missing:
         print(f"\n  {len(missing)} DO NOT APPEAR. A grader that quotes evidence which is not")
         print("  in the document has not read it carefully, and its scores cannot be")
@@ -148,7 +174,7 @@ def main():
         print("  (Check first for an extraction problem - a quote spanning a table cell")
         print("  or a footnote may be real but unreachable in the extracted text.)")
         return 1
-    return 0
+    return 2 if skipped else 0
 
 
 if __name__ == "__main__":

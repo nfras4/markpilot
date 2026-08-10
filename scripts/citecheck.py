@@ -35,7 +35,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from doctext import (load, words, REFS_RE, APPENDIX_RE, norm,  # noqa: E402
-                     is_section_break, die)
+                     is_section_break, die, looks_like_reference)
 
 # The n.d. branch MUST require the periods. Written as `n\.?\s?d\.?` it matches the
 # "nd" inside "and", so every "Smith and Jones, 2020" - in text and in the reference
@@ -134,6 +134,7 @@ def split_sections(paras):
     or above the one that opened the current section."""
     body, refs = [], []
     cur, level = body, 1
+    styled = any(p.is_heading for p in paras)
     for p in paras:
         t = p.text.strip()
         if is_section_break(t, "refs", p.in_table):
@@ -145,6 +146,14 @@ def split_sections(paras):
             level = p.heading_level if p.is_heading else 1
             continue
         if cur is refs and p.is_heading and p.heading_level <= level:
+            cur = body
+        # An UNSTYLED document has no heading to close the section with, so the
+        # reference list ran to EOF and swallowed the trailing AI declaration and
+        # acknowledgements - reporting them as UNCITED REFs, and dragging
+        # linkcheck's coverage denominator down with them. The word count already
+        # had this guard; applying it to only one of the three call sites left the
+        # scripts disagreeing about the same document.
+        elif cur is refs and not styled and t and not looks_like_reference(t):
             cur = body
         cur.append(p)
     return body, refs
@@ -431,8 +440,18 @@ def main():
 
     numeric = expand_numeric(body_text)
     numbered_entries = [entry_number(e) for e in entries]
-    use_numeric = (args.style in ("ieee", "vancouver")
-                   or (numeric and any(n is not None for n in numbered_entries)))
+    # An explicitly named author-date style is NEVER overridden by inference. A
+    # document can contain "[1]" for an appendix and a numbered reference list and
+    # still be APA - inferring numeric mode there abandoned the author-date checks
+    # entirely and printed "OK - every number resolves both ways" on a document
+    # with three real defects, at exit 0, saying nothing about what it skipped.
+    AUTHOR_DATE = ("apa7", "harvard", "chicago", "mla", "aglc")
+    if args.style in ("ieee", "vancouver"):
+        use_numeric = True
+    elif args.style in AUTHOR_DATE:
+        use_numeric = False
+    else:                                   # --style unknown: infer
+        use_numeric = bool(numeric and any(n is not None for n in numbered_entries))
 
     findings = 0
     if use_numeric:

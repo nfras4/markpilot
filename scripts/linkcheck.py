@@ -266,7 +266,9 @@ def check_doi(doi, context, timeout, msg=None):
     if not context:
         return LIVE, f"registered: {title[:60]}", meta
 
-    ctx = norm(context).lower()
+    # Strip DOIs and URLs before the year test: DOI suffixes routinely embed a
+    # year (10.1016/j.jbankfin.2020.105842), so a wrong year passed silently.
+    ctx = re.sub(r"(?i)https?://\S+|10\.\d{4,9}/\S+", " ", norm(context)).lower()
     problems = []
     if not author_matches(msg, context):
         who = first or "(no author on record)"

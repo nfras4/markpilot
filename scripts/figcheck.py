@@ -122,7 +122,7 @@ def series_of(num):
 def check_document(path):
     paras = sections(load(path))
     captions, cap_seen = {}, []
-    carried = set()      # title lines consumed by a number-only caption
+    carried = set()      # title lines consumed by a number-only caption; see below
     cap_idx = {}       # paragraph index -> the key it captions
     for i, p in enumerate(paras):
         t = norm(p.text).strip()
@@ -140,7 +140,15 @@ def check_document(path):
                     nxt = norm(q.text).strip()
                     if not nxt:
                         continue
-                    if not is_caption_line(nxt)[0] and len(nxt) < 300:
+                    # The carried line must LOOK like a title, not merely be under
+                    # 300 characters. Accepting any short paragraph let a body
+                    # sentence stand in for a missing caption, turning a genuine
+                    # "number with no caption text" finding into a clean pass.
+                    title_like = (len(nxt) <= 140
+                                  and not is_caption_line(nxt)[0]
+                                  and not re.search(r"[.!?]\s*$", nxt)
+                                  and len(nxt.split()) <= 20)
+                    if title_like:
                         rest = nxt
                         carried.add(id(q))
                     break
@@ -308,10 +316,12 @@ def main():
 
     # 1 = checked, found problems (numbering defects OR default-styling tells).
     # 2 = could not check (no figures detected, or a --source path that is not there).
-    if problems or hits:
-        return 1
+    # A missing --source path outranks a style tell: part of the source set was
+    # never scanned, so "checked, found problems" would overstate what happened.
     if undetectable or missing:
         return 2
+    if problems or hits:
+        return 1
     return 0
 
 

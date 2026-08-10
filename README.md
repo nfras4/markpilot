@@ -7,6 +7,28 @@ short, re-grades with fresh agents, and only then runs the finishing passes: ref
 cross-matching, resolving every link and DOI, word count against the stated rule, figure
 numbering, prose humanising, and the task sheet's AI-use policy.
 
+> ### It refines a draft. It does not write one.
+>
+> Markpilot requires an existing document and stops if there is none. There is no
+> "generate the assignment" path in this pipeline, by design. It closes the gap between a
+> draft and the rubric it will be marked against — finding where a criterion is not met,
+> saying so specifically, and tightening what is already there.
+>
+> Where closing a gap would need **a position the author has not taken, evidence they have
+> not gathered, or a source they have not read**, it flags that as author-input-required
+> and moves on. It does not supply the argument.
+>
+> That line is enforced, not just asserted: every change records its word delta, the
+> report carries a mandatory `AUTHORED` row showing net words written, and at **+150 net
+> words** the pipeline stops and asks the author before going further. A criterion flagged
+> author-input-required cannot be quietly closed by a later round writing the missing
+> position.
+>
+> It also runs *toward* your institution's AI policy rather than around it: Step 8 reads
+> the policy and helps you comply with it, and humanising the prose is never treated as a
+> substitute for declaring. Whether this kind of assistance is permitted is your course's
+> call, not this tool's.
+
 Everything mechanical is a script. Python 3.8+, standard library only — no `pip install`,
 no dependencies, no API keys. Only link resolution and DOI lookup touch the network.
 
@@ -68,7 +90,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
 | `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
-| `selftest.py` | Regression cases over the parsing regexes — run it, it prints the count |
+| `selftest.py` | Regression cases over the parsing regexes, plus `e2e.py` — run it, it prints the count |
 
 ```bash
 python scripts/doctext.py   report.docx --count --limit 2000 --exclude-refs --exclude-intext
@@ -125,6 +147,9 @@ colour decision. Writing none is evidence nobody did.
 
 ## What it will not do
 
+- **It will not write your assignment.** It needs a draft to start, and where a rubric gap
+  needs a position you have not taken or evidence you have not gathered, it says so instead
+  of inventing it.
 - **It will not help hide AI use.** Step 8 finds the task sheet's AI policy and helps you
   comply with it. If a declaration is required, the report says so, and humanising the
   prose is not treated as a substitute for making one.

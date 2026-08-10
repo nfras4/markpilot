@@ -172,7 +172,13 @@ def looks_like_reference(text):
     t = (text or "").strip()
     if not t:
         return False
-    if len(t) > 120:                                  # long enough to be an entry
+    # Length alone is NOT evidence: acknowledgements and an AI declaration after
+    # the reference list are long paragraphs too, and treating them as entries kept
+    # the section alive to EOF, deleting them from the count. A long paragraph
+    # still has to carry something bibliographic.
+    if len(t) > 120 and re.search(
+            r"\((?:1[6-9]|20)\d{2}[a-z]?\)|\b(?:1[6-9]|20)\d{2}\b.{0,40}?\d+[-–—]\d+"
+            r"|\bdoi\b|https?://|\bpp?\.\s*\d|\bvol\.|\bed(?:s?\.|ition)\b", t, re.I):
         return True
     if re.match(r"^\s*\[\d+\]|^\s*\d+[.)]\s+[A-Z]", t):
         return True
@@ -312,16 +318,30 @@ def _html_paras(text):
     # ">Heading", which then fails every heading and section-boundary test.
     text = re.sub(r"(?i)<h([1-6])[^>]*>(.*?)</h\1>", "\n\x00HEAD\x00\\2\n", text)
     text = re.sub(r"(?i)<br\s*/?>", "\n", text)
-    text = re.sub(r"(?i)</(p|div|li|tr|h[1-6])>", "\n", text)
+    # Table boundaries, marked BEFORE the tags are stripped. The in_table guard on
+    # section detection exists because an APA definitions table has a column headed
+    # "Reference"; without these the guard covered .docx only, so an html document
+    # - and the PDF text dumps Step 0 routes through these readers - stayed
+    # hijackable, and --exclude-tables was a permanent no-op.
+    text = re.sub(r"(?i)<table[^>]*>", "\n\x00TBL+\x00\n", text)
+    text = re.sub(r"(?i)</table\s*>", "\n\x00TBL-\x00\n", text)
+    text = re.sub(r"(?i)</(p|div|li|tr|td|th|h[1-6])>", "\n", text)
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
-    out = []
+    out, depth = [], 0
     for line in text.splitlines():
         s = line.strip()
+        if s == "\x00TBL+\x00":
+            depth += 1
+            continue
+        if s == "\x00TBL-\x00":
+            depth = max(0, depth - 1)
+            continue
         if s.startswith("\x00HEAD\x00"):
-            out.append(Para(s[len("\x00HEAD\x00"):].strip(), "Heading1"))
+            out.append(Para(s[len("\x00HEAD\x00"):].strip(), "Heading1",
+                            in_table=depth > 0))
         else:
-            out.append(Para(s))
+            out.append(Para(s, in_table=depth > 0))
     return out
 
 
@@ -343,7 +363,7 @@ def load(path):
     if ext == ".docx":
         paras = _docx_paras(path)
         if not any(p.text.strip() for p in paras) and os.path.getsize(path) > 0:
-            sys.exit(
+            die(
                 f"error: {path} parsed as a .docx but yielded no text at all.\n"
                 "  Do NOT treat this as an empty document or as a pass - the body "
                 "could not be read.\n"
@@ -561,6 +581,12 @@ def section_report(paras, budget, tolerance, args):
     for name, want in budget:
         hit = None
         for h in order:
+            # A heading already claimed by an earlier budget line cannot match
+            # again. Without this, "Discussion and Conclusion" satisfied both a
+            # `Discussion =` and a `Conclusion =` line, counting one section twice
+            # and reporting every row within budget on a document well short of it.
+            if h in matched:
+                continue
             if h.lower().startswith(name.lower()) or name.lower() in h.lower():
                 hit = h
                 break
@@ -634,11 +660,11 @@ def main():
     paras = load(args.file)
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    if args.text or not (args.outline or args.count):
+    if args.text or not (args.outline or args.count or args.budget):
         for p in paras:
             if p.text.strip():
                 print(p.text)
-        if not args.count and not args.outline:
+        if not (args.count or args.outline or args.budget):
             return 0
 
     if args.outline:
