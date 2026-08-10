@@ -330,3 +330,57 @@ Three defects in it were caught on its own first run:
   `Australian Securities and Investments Commission. (2023)` — reported twice, once as
   an orphan and once as an uncited entry. They are now paired and reported as a
   check-this, since APA 7 only requires the abbreviation be introduced at first mention.
+
+### Consent became two questions, and the link stopped needing an account
+
+The feedback step asked one question that quietly bundled two permissions. "You may quote
+this" and "you may use my name" are different things, and the second is the one people
+regret, so they are now asked and stored separately: `--consent none|anon|named`,
+defaulting to the most private.
+
+The guarantee is structural rather than procedural. `public_record()` never copies the name
+into the publishable object unless consent is exactly `named` — it is not filtered out
+downstream by a caller who has to remember to. Breaking that one condition fails five tests
+across `selftest.py` and `e2e.py`, which is how it was checked rather than assumed.
+
+- **The GitHub issue was the only door**, which quietly required an account of everyone
+  asked. The pre-filled link now points at a plain web form; GitHub, mailto and a
+  copy-and-send block moved behind `--doors`. `CONTACT_EMAIL` ships empty, because an
+  address written into a public repository is an address that gets scraped.
+- **Three links and a copy block is a menu**, and a menu is a decision somebody doing you a
+  favour did not ask to make. `--save` prints one door.
+- **The test suite wrote to the real `~/.markpilot`**, so running it burned the developer's
+  own "ask once, ever" state. `MARKPILOT_HOME` now redirects it.
+- **Truncating a long comment deleted roughly twice what it needed to**, because the comment
+  appears in a body more than once and the overflow was subtracted once. A 600-word
+  testimonial came back empty rather than trimmed; the fit is now a binary search.
+- **The claude.ai edition gained `testimonialLink()`** and an honest limitation: with no
+  filesystem, "ask once, ever" degrades to "once per conversation", and the instructions
+  now forbid claiming otherwise.
+
+### Step 6 runs under a written clamp, and the report says which editor ran
+
+Step 6 said "invoke the `humaniser` skill" while the README never told anyone to install
+one and there was no fallback. On a machine without it the step silently degraded, and the
+PROSE row read identically either way — the exact failure the second governing rule exists
+to prevent. It is now a declared soft dependency with `references/prose.md` as the brief,
+and the report names the editor that actually ran.
+
+- **A general-purpose de-AI rule was going to break the references.** Upstream humanizer
+  makes "the final rewrite contains no em dashes or en dashes" a hard constraint. APA,
+  Harvard, IEEE and Vancouver all require the en dash in `118–142` and `[3]–[7]`, and
+  `references/referencing.md` specifies it. Body-prose ranges like `2019–2021` sat outside
+  Step 6's exclusion list, so the step would have corrupted formatting Step 3 had just
+  verified.
+- **Only one spelling was checked.** Upstream is `humanizer`; local adaptations are
+  routinely renamed `humaniser`. Checking one name falls through to the weaker pass on a
+  machine that has the better tool.
+- **Never-invent-facts is now stated here rather than assumed.** Older copies of the editor
+  do not carry it and will make a limp sentence specific by supplying the specifics. In a
+  graded submission that is fabricated evidence, not a style improvement.
+- **File mode is asked for by name.** The editor's default returns a draft, audit bullets
+  and a final rewrite into the conversation; Step 6 needs an edited file.
+- **Keeping paragraph structure is a deliberate override**, documented as one. Upstream
+  says merge and split freely, which is right for prose that will be read and wrong for
+  prose that will be marked: Step 2 already graded the document in the shape it is in.
+

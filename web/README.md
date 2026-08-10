@@ -19,6 +19,8 @@ made mechanical and is honest about the parts that become judgement.
 | Grading | **3 independent subagents**, lowest score governs | ⚠ **one pass, self-assessed** | no subagents |
 | Quoted-evidence check | script | ⚠ manual | no second context to check the first |
 | Report as `.docx` / `.pdf` | script | Claude can write a doc artefact | — |
+| Feedback link | script | **`markpilot-web.js`** | same link, same consent split |
+| "Ask once, **ever**" | state file | ⚠ **once per conversation** | nothing persists between chats |
 
 The two rows that matter most are the last-but-two.
 

@@ -11,13 +11,15 @@ repeatedly broken an unrelated case. Nine of these were live defects.
 Exits non-zero on failure.
 """
 
+import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
 import urllib.parse  # noqa: E402
-from testimonial import share_url, URL_BUDGET  # noqa: E402
+from testimonial import (  # noqa: E402
+    share_url, form_url, public_record, record, URL_BUDGET)
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -310,11 +312,43 @@ def main():
     if _q.get("labels", [""])[0] != "testimonial":
         fails.append(("share-url", "labels", _q.get("labels"), "testimonial"))
 
+    # Consent. The name must be absent from the publishable record by construction
+    # on anything short of "named" - not filtered out later by a caller who has to
+    # remember to. Each of these is one line of the promise the README makes.
+    for _consent, _named in (("none", None), ("anon", False), ("named", True)):
+        _rec = record("Priya M.", "UQ finance", "5", "Caught a wrong DOI.",
+                      "1 Jan 2026", _consent)
+        _pub = public_record(_rec)
+        if _named is None:
+            if _pub is not None:
+                fails.append(("consent", "'none' must publish nothing",
+                              _pub, None))
+            continue
+        if _pub is None:
+            fails.append(("consent", f"'{_consent}' must be publishable", None, "a record"))
+            continue
+        if ("Priya M." in json.dumps(_pub)) != _named:
+            fails.append(("consent", f"name under '{_consent}'",
+                          _pub.get("name"), "Priya M." if _named else "Anonymous"))
+        if "Caught a wrong DOI." not in json.dumps(_pub):
+            fails.append(("consent", f"the words survive '{_consent}'", "lost", "kept"))
+    # ...and must not ride along in the pre-filled link either, which is a second
+    # place the name can escape and the one nobody looks at.
+    _f = form_url("Priya M.", "UQ finance", "5", "Good.", "1 Jan 2026", "anon")
+    if "Priya" in _f:
+        fails.append(("consent", "anon form link carries the name", "leaked", "absent"))
+    # A long comment must be trimmed, not deleted: subtracting the overflow once
+    # cut roughly twice what was needed, because the comment appears twice.
+    _long = form_url("A", "", "5", "word " * 400, "1 Jan 2026", "named")
+    if len(_long) > URL_BUDGET or "word" not in _long:
+        fails.append(("consent", "long comment trims rather than vanishes",
+                      len(_long), f"<={URL_BUDGET} and non-empty"))
+
     fails.extend(e2e.run())
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + len(e2e.CASES) + 7)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 14)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

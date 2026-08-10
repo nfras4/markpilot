@@ -144,3 +144,45 @@ STILL ON YOU
 End by saying, once and plainly, that the mechanical numbers are real but the grade is a
 single self-assessed pass, and that the Claude Code version runs three independent graders
 and resolves every reference if they want the stronger check.
+
+## Feedback
+
+Ask **at most once in a conversation**, and only when all of these hold. Otherwise skip it
+and say nothing:
+
+- the report has been delivered;
+- nothing came back `checked: false` and unresolved, and no gate was left blocked;
+- you have not already asked in this chat.
+
+There is no filesystem here, so unlike the Claude Code version this cannot be remembered
+across chats. **Do not tell them they will never be asked again** — you cannot promise
+that. "I'll only ask this once" is the honest version.
+
+Ask two questions together, in one message:
+
+1. **How did this go?** — 1 to 5, plus anything they want to add.
+2. **May it be quoted?** — *with my name* / *anonymously* / *keep it private*.
+
+The second is not a formality. "You may quote this" and "you may use my name" are separate
+permissions, and running them together is how somebody ends up on a website they did not
+expect to be on. If they answer the first and skip the second, treat that as **private**.
+
+Then build the link in the Analysis tool — not by hand, because a comment containing an
+apostrophe or an ampersand is exactly what breaks a hand-written URL:
+
+```js
+testimonialLink({ rating: 5, consent: "named", name: "...", role: "...", comment: "..." })
+```
+
+It returns `null` for *keep it private*. That is the correct outcome, not a failure: there
+is nothing to send, so send nothing and do not offer an anonymous version instead. On
+`"anon"` the name is not in the link at all.
+
+Give them the URL as a plain markdown link and say what it is: the form opens with their
+answers already in it, in their own browser, and **nothing is sent until they press
+Submit** — they can change anything there first, including the consent. It needs no
+account and no sign-in.
+
+Do not build this as an artifact. Artifacts run in a sandboxed frame that cannot reach
+another origin, so a form inside one could not submit anywhere; a link in the chat can.
+Never claim anything was stored, sent or recorded here — nothing was.

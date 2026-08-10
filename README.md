@@ -60,6 +60,24 @@ Then in Claude Code:
 /markpilot assignment.docx --criteria rubric.pdf --task brief.pdf
 ```
 
+### Optional: a better Step 6
+
+Step 6 uses the [humanizer](https://github.com/blader/humanizer) skill if you have it — a
+much fuller catalogue of AI writing tells than the dozen in `references/prose.md`. It is a
+**soft dependency**: markpilot runs the pass itself when it is absent, and either spelling
+of the skill name (`humanizer` or `humaniser`) is detected.
+
+```bash
+git clone https://github.com/blader/humanizer ~/.claude/skills/humanizer
+```
+
+Two things this does *not* mean. It is tuned for general-audience prose, so it is always
+invoked under the clamp in [`references/prose.md`](references/prose.md) — a de-AI editor
+that treats every dash as a tell will rewrite `pp. 118–142` and `2019–2021` into reference
+errors, in the document whose references Step 3 just verified. And the report says which
+editor ran, because a report that reads the same either way is telling you nothing about
+the pass it describes.
+
 ## Pipeline
 
 ```
@@ -91,7 +109,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
 | `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
 | `export.py` + `pdfwrite.py` | Turns any report into a real `.docx` and a real `.pdf` — both written directly, no pandoc, no browser |
-| `testimonial.py` | One-time, opt-in feedback. Stores locally; can show the exact text and, on a separate explicit yes, file it as a GitHub issue |
+| `testimonial.py` | One-time, opt-in feedback. Stores locally; asks *may I quote this* and *may I use your name* as separate questions, and hands back a pre-filled link that needs no account |
 | `selftest.py` | Regression cases over the parsing regexes, plus `e2e.py` — run it, it prints the count |
 
 ```bash

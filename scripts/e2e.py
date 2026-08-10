@@ -111,7 +111,13 @@ CASES = [
         "--preview must never post, and must exit 0",
         "unused2.md", "x\n",
         ["testimonial.py", "--preview", "--name", "A", "--rating", "5",
-         "--comment", "A comment."], 0,
+         "--consent", "named", "--comment", "A comment."], 0,
+    ),
+    (
+        "--preview refuses what was never consented to, rather than showing it",
+        "unused3.md", "x\n",
+        ["testimonial.py", "--preview", "--name", "A", "--rating", "5",
+         "--comment", "A comment."], 2,
     ),
     (
         "an unreadable document exits 2, never 1",
@@ -122,26 +128,96 @@ CASES = [
 ]
 
 
+# The consent guarantee, end to end: what --save was told, and what --wall is
+# therefore allowed to emit. A unit test on public_record() cannot see this - the
+# question is whether the name survives a real write and a real read, through the
+# file on disk, which is where a "just filter it on the way out" mistake would live.
+#
+# (label, --save args, follow-up args, must appear, must NOT appear)
+SAID = "Caught a DOI that resolved to somebody else's paper."
+CONSENT_CASES = [
+    (
+        "consent 'anon' publishes the words and drops the name",
+        ["--consent", "anon"], ["--wall"],
+        [SAID, "Anonymous"], ["Priya M.", "UQ finance"],
+    ),
+    (
+        "consent 'named' publishes the name that was agreed to",
+        ["--consent", "named"], ["--wall"],
+        [SAID, "Priya M.", "UQ finance"], [],
+    ),
+    (
+        "consent 'none' reaches the wall as nothing at all",
+        ["--consent", "none"], ["--wall"],
+        ["[]"], ["Priya M.", SAID],
+    ),
+    (
+        "consent 'none' is offered no link to open, not even an anonymous one",
+        ["--consent", "none"], ["--doors"],
+        ["nothing"], ["http", "Priya M."],
+    ),
+    (
+        "the name never rides in the pre-filled link either, unless it was agreed to",
+        ["--consent", "anon"], ["--doors"],
+        ["http", "Anonymous"], ["Priya M.", "UQ+finance", "UQ%20finance"],
+    ),
+]
+
+
+def run_consent():
+    """Returns a list of (kind, label, got, expected) failures."""
+    fails = []
+    base = ["--save", "--rating", "5", "--name", "Priya M.",
+            "--role", "UQ finance", "--comment", SAID, "--stamp", "1 Jan 2026"]
+    script = os.path.join(HERE, "testimonial.py")
+    for label, extra, follow, want, unwanted in CONSENT_CASES:
+        # A fresh home per case: the ledger appends, so a shared one would let an
+        # earlier case's consented entry satisfy a later case's assertion.
+        with tempfile.TemporaryDirectory() as home:
+            env = dict(os.environ, MARKPILOT_HOME=home)
+            subprocess.run([sys.executable, script] + base + extra,
+                           capture_output=True, env=env)
+            r = subprocess.run([sys.executable, script] + follow,
+                               capture_output=True, text=True, env=env,
+                               encoding="utf-8", errors="replace")
+            out = r.stdout or ""
+            for s in want:
+                if s not in out:
+                    fails.append(("e2e", label, f"missing {s!r}", "present"))
+            for s in unwanted:
+                if s in out:
+                    fails.append(("e2e", label, f"leaked {s!r}", "absent"))
+    return fails
+
+
+def total():
+    return len(CASES) + len(CONSENT_CASES)
+
+
 def run():
     """Returns a list of (kind, label, got, expected) failures."""
     fails = []
     with tempfile.TemporaryDirectory() as d:
+        # Redirect the testimonial state out of the real home directory. Without
+        # this, running the suite writes to whatever the developer has actually
+        # stored, and "ask once, ever" gets burned by a test run.
+        env = dict(os.environ, MARKPILOT_HOME=os.path.join(d, "home"))
         for label, name, content, argv, expect in CASES:
             path = os.path.join(d, name)
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(content)
             cmd = [sys.executable, os.path.join(HERE, argv[0])]
             cmd += [a.format(f=path) for a in argv[1:]]
-            got = subprocess.run(cmd, capture_output=True).returncode
+            got = subprocess.run(cmd, capture_output=True, env=env).returncode
             if got != expect:
                 fails.append(("e2e", label, got, expect))
-    return fails
+    return fails + run_consent()
 
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     bad = run()
-    print(f"e2e: {len(CASES) - len(bad)}/{len(CASES)} pass")
+    print(f"e2e: {total() - len(bad)}/{total()} pass")
     for _, label, got, exp in bad:
-        print(f"  FAIL {label}\n        exit {got}, expected {exp}")
+        print(f"  FAIL {label}\n        {got}, expected {exp}")
     sys.exit(1 if bad else 0)

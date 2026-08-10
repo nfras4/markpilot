@@ -283,3 +283,67 @@ function markpilot(text, opts) {
     ]
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * testimonialLink() - the feedback step, for an environment with no shell.
+ *
+ * In Claude Code this is testimonial.py: it stores the answer on the user's own
+ * machine, remembers that it asked, and prints a pre-filled link. Here there is
+ * no filesystem and no persistent state, so two of those three are simply not
+ * available and must not be pretended at:
+ *
+ *   - nothing is stored anywhere, so there is no local copy to fall back on;
+ *   - "ask at most once, ever" cannot be enforced across chats. It degrades to
+ *     "ask at most once per conversation", which is a weaker promise. Do not
+ *     claim the stronger one.
+ *
+ * What DOES survive is the part that matters: the consent split, and a link that
+ * needs no account. Build it here rather than by hand - percent-encoding a
+ * comment containing an apostrophe, an ampersand or a line break is exactly the
+ * kind of thing that silently produces a broken link.
+ *
+ * Nothing here sends anything. It returns a string.
+ * ------------------------------------------------------------------------- */
+
+var MP_FORM = "https://nickwfraser.dev/testimonial";
+var MP_URL_BUDGET = 1900;
+
+function testimonialLink(a) {
+  a = a || {};
+  var consent = a.consent === "named" ? "named" : a.consent === "anon" ? "anon" : "none";
+  // Private means private. There is no link, because there is nothing to send.
+  if (consent === "none") return null;
+
+  var rating = parseInt(a.rating, 10);
+  var build = function (comment) {
+    var q = [];
+    var add = function (k, v) {
+      if (v !== "" && v !== null && v !== undefined) {
+        q.push(encodeURIComponent(k) + "=" + encodeURIComponent(v));
+      }
+    };
+    add("rating", rating >= 1 && rating <= 5 ? String(rating) : "");
+    add("consent", consent);
+    add("comment", comment);
+    add("source", "claude-web");
+    // The name rides along only on the consent that asked for it. Same rule as
+    // public_record() in the skill, and for the same reason.
+    if (consent === "named") {
+      add("name", (a.name || "").trim());
+      add("role", (a.role || "").trim());
+    }
+    return MP_FORM + "?" + q.join("&");
+  };
+
+  var comment = (a.comment || "").replace(/\s+/g, " ").trim();
+  var url = build(comment);
+  if (url.length <= MP_URL_BUDGET) return url;
+  var lo = 0, hi = comment.length, best = build("");
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    var c = comment.slice(0, mid).replace(/\s+$/, "");
+    var u = build(c ? c + "…" : "");
+    if (u.length <= MP_URL_BUDGET) { best = u; lo = mid + 1; } else { hi = mid - 1; }
+  }
+  return best;
+}

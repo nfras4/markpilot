@@ -86,7 +86,7 @@ steps after it are mechanical, and fixing them does not move a rubric criterion.
 3  References        cross-match, RESOLVE every link and DOI, check quotes, format
 4  Word count        against the stated rule and its stated exclusions
 5  Figures           numbering, cross-refs, charts that look pasted from a notebook
-6  Humanise          /humaniser under the academic clamp
+6  Humanise          the humanizer skill under the clamp, or inline and said so
 7  Re-verify         humanising changed the prose AND the count - check both again
 8  AI declaration    comply with the task sheet's policy
 9  Report            what passed, what you changed, what is still on the user
@@ -638,24 +638,75 @@ that turns a presentation problem into a misconduct finding.
 
 Skip with `--no-humanise` (which also skips the re-grade in Step 7).
 
-Invoke the `humaniser` skill on the body prose — the argument, discussion and
-conclusion. **Not** the abstract or executive summary unless the rubric scores its
-style, and never quotations, citations, reference entries, data, captions or headings.
+**`references/prose.md` is the brief for this step**, whoever carries it out. Read it
+first. It names what to remove, what to keep because a marker rewards it, and what must
+not be touched at all.
 
-**Under the academic clamp.** Humaniser is tuned for natural, general-audience writing
-and strips several things academic marking rewards. Pass these constraints explicitly:
+### Which editor is running
 
+The humanizer skill is a **soft dependency**. It is a far better catalogue of AI tells than
+this file could restate, so use it when it is there:
+
+1. Check the available skills for one named **`humanizer` or `humaniser`**. Both spellings
+   are in circulation — upstream is `humanizer`, and local adaptations are often renamed —
+   so checking only one silently falls through to the weaker pass on a machine that has it.
+2. **Available** → invoke it, passing `references/prose.md` as an explicit clamp on its
+   defaults. It is tuned for general-audience prose and is wrong in a few specific places
+   about graded academic writing; the clamp is what makes it safe here.
+3. **Not available** → run the pass yourself, directly from `references/prose.md`. This is
+   a weaker pass and it must be reported as one.
+
+**Ask for file mode.** Upstream v2.9.1 defines three invocation modes, and the default —
+pasted-text — returns a draft, audit bullets and a final rewrite into the conversation.
+That is the wrong artefact here and it is expensive. Say *file mode: rewrite the document
+in place and report a summary of what changed.*
+
+**Do not assume the version.** Forks and renamed copies in circulation predate two things
+that matter, so pass both explicitly rather than relying on the skill to hold them:
+
+- the **never-invent-facts** rule, and the fabrication question in its audit step. Older
+  copies ask only "what still reads as AI" and never "does the rewrite state a fact that is
+  not in the source". Fabrication is the highest-severity defect this pipeline can produce.
+- **Invocation Modes** themselves. A copy without them has no file mode, so it will return
+  the three-version chat deliverable no matter how it is asked. Take the final rewrite from
+  it and apply the edit yourself; do not paste a draft into the document.
+
+Never silently substitute one for the other. The PROSE row names which ran:
+
+```
+PROSE      humanised via /humanizer · 12 tells removed
+PROSE      humanised inline · 9 tells removed — no humanizer skill is installed,
+           so this was a smaller catalogue than the full pass
+```
+
+A report that reads identically whether or not the better tool was present is exactly the
+failure mode the rest of this pipeline is built to avoid.
+
+### The clamp, in short
+
+Full version in `references/prose.md`; these are the ones that bite.
+
+- **Body prose only.** Never quotations, citations, reference entries, data, captions or
+  headings, and not the abstract unless the rubric scores its style.
+- **En dashes are not em dashes.** A general-purpose "the final text contains no em or en
+  dashes" rule will destroy `118–142`, `2019–2021`, `a 20–30% increase` and `[3]–[7]` —
+  formatting that APA, Harvard, IEEE and Vancouver all require, in the same document whose
+  references Step 3 just verified. Cut em dashes used as connectors. Leave en dashes in
+  ranges and coordinate compounds alone.
 - **Keep hedging on empirical claims.** "The results suggest" is accurate, not weak;
-  overclaiming loses marks that caution does not.
-- **Keep structural signposting** where the rubric or discipline expects it. Some
-  criteria award marks for exactly the "This section examines…" sentences it would cut.
-- **Keep formal register and discipline terminology.** Precision is being graded.
-- **Keep passive voice in methods** where the convention calls for it.
+  overclaiming loses marks that caution does not. Cut only stacked hedges.
+- **Keep structural signposting** where the rubric or discipline expects it. Some criteria
+  award marks for exactly the "This section examines…" sentences it would cut.
+- **Keep formal register, discipline terminology, and passive voice in methods.**
+- **Leave curly quotes, and bold or title-case headings** that the style guide mandates.
+  APA 7 requires bold headings and title case at levels 1–3.
 - **Do not change the word count materially** — flag it if a rewrite would.
 
-What it should remove is real and worth removing: em-dash overuse, "delve", "tapestry",
-"testament to", "underscores the importance of", rule-of-three cadence, promotional
-filler, and empty paragraphs that restate the previous three.
+### The deliverable
+
+The edited document and entries in `changes.md`. Not a draft, an audit and a final version
+to choose between: this is a pass over a file, and Step 7 is the independent check that a
+self-review loop cannot be.
 
 ## Step 7 — Re-verify
 
@@ -718,7 +769,7 @@ DOIS       0 missing · 0 year questions · 0 conflicts                doifind e
 QUOTES     7 quotes + 4 statistics · 11/11 checked against source       by hand
 FIGURES    3 figures · 1 table · numbered, captioned, cross-referenced  figcheck exit 1
            2 charts were pure library default → corrected code in changes.md
-PROSE      humanised · 12 tells removed
+PROSE      humanised via /humanizer · 12 tells removed
            regression grader: 3/4 criteria re-confirmed at baseline band;
            `evidence` dropped D→C, the two sentences carrying it restored
 AI POLICY  declaration required (task sheet §4) → drafted, on the coversheet
@@ -742,6 +793,11 @@ Variants that must be used when they apply:
 - **PDF input** → add to `SOURCE`: `checks ran on a text extraction; page fidelity lost`.
 - **No plotting source** → `FIGURES … chart styling NOT CHECKED — no plotting source`.
 - **`--report-only`** → `CHANGED  nothing (--report-only)`.
+- **No humanizer skill installed** → `PROSE  humanised inline · <n> tells removed — no
+  humanizer skill is installed, so this was a smaller catalogue than the full pass`. Name
+  the skill that *did* run when one did: `humanised via /humanizer`, `via /humaniser`.
+- **`--no-humanise`** → `PROSE  NOT RUN (--no-humanise)`, and Step 7's regression grade
+  says `NOT RUN` for the same reason.
 - **Similarity** → markpilot does **not** check text-matching or plagiarism, and Turnitin
   is not run here. Say so under NOT CHECKED rather than letting a reader assume it was
   covered.
@@ -787,56 +843,84 @@ nothing:
 Asking for a recommendation after a run that failed, stalled, or could not check half the
 references is worse than never asking.
 
-If it returns `0`, ask **once**, with AskUserQuestion, in one question — not a sequence.
-Offer: *leave a short comment*, *rate it only*, *no thanks*. Then:
+If it returns `0`, ask **once** — a single AskUserQuestion call carrying **two** questions,
+never a sequence of prompts:
+
+| Question | Options |
+|---|---|
+| *How did this go?* | `★★★★★ nailed it` · `★★★★ good` · `★★★ mixed` · `★★ or less — it got in the way` |
+| *If you'd like it quoted somewhere* | `quote me by name` · `quote it, but anonymously` · `keep it private` · `no feedback, thanks` |
+
+Free text from *Other* on the first question becomes `--comment`. The bottom rating is a
+bucket rather than a value because AskUserQuestion allows four options; the form the link
+opens has a real 1–5 widget, so anyone who wants to say *1* can correct it there.
+
+**The second question is the one that matters.** "You may quote this" and "you may use my
+name" are separate permissions, and running them together is how people end up on a website
+they did not expect to be on. Ask both. Default to the private answer if they skip.
 
 ```bash
-python scripts/testimonial.py --save --name "..." --role "..." \
-    --rating 5 --stamp "<today>" --comment "..."
-python scripts/testimonial.py --decline          # if they said no
+python scripts/testimonial.py --save --rating 5 --consent named \
+    --name "..." --role "..." --stamp "<today>" --comment "..."
+python scripts/testimonial.py --decline          # if they said no feedback
 ```
 
+`--consent` is `none` (the default), `anon`, or `named`. Pass what they actually chose.
 Either branch marks the state, so it never asks again on any future run, in any project.
 
-**What it does with the answer:** writes it to `~/.markpilot/testimonials.md` on the
-user's own machine, then prints a GitHub "new issue" link **with their words already
-filled in**.
+**What it does with the answer:** writes it to `~/.markpilot/testimonials.md` and
+`testimonials.jsonl` on the user's own machine, then prints **one** pre-filled link to the
+web form.
 
-**Pre-filled is not posted.** The link opens a draft issue in their own browser, under
-their own account; nothing reaches the repository until they press Submit, and they can
-edit or abandon it there. Say that when you show the link — a URL that looks like it might
-already have sent something is worse than no link at all. The script itself opens no
-network connection.
+**Pre-filled is not submitted.** The link opens the form with their answers already in it,
+in their own browser; nothing is sent until they press Submit, and they can change anything
+there first — including the consent. Say that when you show the link — a URL that looks
+like it might already have sent something is worse than no link at all. The script itself
+opens no network connection.
 
-`python scripts/testimonial.py --share` reprints the link later if they close the terminal.
+The form needs **no account and no sign-in**, which is the whole reason it is the door
+being offered. Do not talk them into a different one.
 
-### Offering to file it for them
+### Consent governs what leaves the machine
 
-A browser trip is where most people drop out. So after saving, offer to post it directly —
-as a **second, separate decision**, never folded into the first:
+The script enforces this; do not work around it.
+
+- `none` → no link is printed at all. There is nothing to send, and that is a complete
+  answer. Do not offer an "anonymous version anyway".
+- `anon` → the words travel, the name does not. It is dropped from the link, the copy
+  block and `--wall` — not hidden at the end, never copied in at the start.
+- `named` → the name travels exactly as given.
+
+`python scripts/testimonial.py --doors` reprints every way to send it — the form, a GitHub
+issue, and a plain block to copy — if they close the terminal or would rather use another.
+Only reach for it if they ask.
+
+### If they would rather file it on GitHub
+
+Some people prefer it. Offer only on request, and as a **second, separate decision**:
 
 ```bash
-python scripts/testimonial.py --preview --name "..." --role "..." --rating 5     --stamp "<today>" --comment "..."
+python scripts/testimonial.py --preview --consent named --name "..." --rating 5 \
+    --stamp "<today>" --comment "..."
 ```
 
-Show them that output **verbatim**. It prints the exact title and body, and says plainly
-that it would be a public issue on a public repository under their own GitHub account. Then
-ask with AskUserQuestion: *post it* / *just give me the link* / *keep it local*.
-
-Only on an explicit yes:
+Show that output **verbatim** — it prints the exact title and body and says plainly that it
+would be a public issue under their own account. Only on an explicit yes:
 
 ```bash
-python scripts/testimonial.py --file --name "..." ...     # same arguments
+python scripts/testimonial.py --file --consent named --name "..." ...   # same arguments
 ```
 
 Rules that are not negotiable:
 
 - **Never run `--file` without showing `--preview` first and getting a yes.** "I'll send
   this for you" is a different act from "here is a link", and it needs its own consent.
+- `--preview` and `--file` refuse outright under `--consent none`. Do not re-run them with
+  a consent they did not give.
 - **Never re-ask** if they decline the posting. They already gave you the testimonial; the
   local copy is the win.
-- If `gh` is missing or not logged in, `--file` refuses and prints the link instead. It
-  will not post under some other account that happens to be configured — that would put
+- If `gh` is missing or not logged in, `--file` refuses and prints the other doors instead.
+  It will not post under some other account that happens to be configured — that would put
   their words under a stranger's name.
 - Do not offer this at all when the run itself was blocked or incomplete, same as the
   original ask.
