@@ -34,6 +34,27 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Added after the first real run
+
+- **`doifind.py`** — looks up reference entries that carry no DOI, in Crossref, by their
+  own text. `linkcheck` could report that 23 of 29 entries were unverifiable but could do
+  nothing about it; this closes the loop. Reports `FOUND`, `YEAR-SPLIT` (online and issue
+  years differ — the commonest citation error in student work), `WEAK`/`NO-MATCH` (left
+  for a human), and `GREY-LIT`. Applies nothing automatically.
+
+Three defects in it were caught on its own first run:
+
+- A record with **no author array passed the author check vacuously** — `if not authors:
+  return True`. That is how ASIC's 2023 report matched *ASIC v Ingleby*, a 2013 court
+  case, and NHMRC's 2023 statement matched a 1993 article, both then reported as
+  confident year corrections. No authors now fails the check.
+- Particle surnames failed the substring test, so the **correct** DOI for van Rooij et al.
+  (2011) was demoted to a weak match. Comparison is now on letters only.
+- Grey literature was queried at all. Regulator reports and standards are not in
+  Crossref, so any match is a different document sharing the organisation's name. They
+  are now detected and routed to the issuing body instead — and the detector has to allow
+  a lowercase "and", since both worst cases contained one.
+
 ### Workflow gaps found by the first real run
 
 - **Reference coverage was not reported at all.** A list where only 6 of 29 entries

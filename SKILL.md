@@ -307,7 +307,27 @@ as broken.
 resolves cleanly to somebody else's paper looks perfect from every angle except the one
 that matters.
 
-### 3c. Check what no script can
+### 3c. Backfill missing identifiers
+
+If REFERENCE COVERAGE is short, most of the list cannot be verified by anything. Close
+that gap before deciding the references are sound:
+
+```bash
+python scripts/doifind.py FILE --json .markpilot/<docname>/doifind.json
+```
+
+It looks each identifier-less entry up in Crossref by its own text and reports what the
+record says. Statuses: `FOUND` (a DOI to add), `YEAR-SPLIT` (published online and issued
+in different years — the commonest citation error in student work, and it prints both
+rather than asserting a correction), `WEAK` and `NO-MATCH` (left for a human — a wrong
+DOI is worse than no DOI), and `GREY-LIT` (regulator reports, standards, statements:
+Crossref indexes almost none of them, so verify the issuing body's own URL instead).
+
+**Nothing is applied automatically, and nothing should be.** Check each proposed DOI
+against the source before it goes in the document. A confident-looking wrong DOI is the
+`MISMATCH` case in 3b, arriving by a different route.
+
+### 3d. Check what no script can
 
 Spot-check **every direct quote and every statistic**: that the page range exists, that
 the quoted sentence appears in the source, that the finding attributed to the source is
@@ -531,12 +551,14 @@ or that exited `2`, appears in the report as such — never as a pass.
 | `--no-figures` | skip step 5 |
 | `--link-timeout N` | seconds per fetch, default 20 — raise on a slow connection |
 | `--budget FILE` | per-section word budget for step 4 (`Section prefix = N` per line) |
+| `--no-backfill` | skip the DOI lookup in step 3c |
 
 ## Files
 
 Written under `.markpilot/<docname>/`: `rubric.md`, `constraints.md`, `text.txt`,
-`grades-round-N.md`, `budget.txt`, `links.json`, `changes.md`, `report.md`.
+`grades-round-N.md`, `budget.txt`, `links.json`, `doifind.json`, `changes.md`,
+`report.md`.
 
-`scripts/selftest.py` (90 cases) guards the parsing regexes, which are the fragile part
+`scripts/selftest.py` (107 cases) guards the parsing regexes, which are the fragile part
 of this skill — several of those cases are defects that reached working code. Run it
 after editing any regex in `doctext.py`, `citecheck.py` or `figcheck.py`.

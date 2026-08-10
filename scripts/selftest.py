@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import is_caption_line, strip_intext, words, REFS_RE  # noqa: E402
+from doifind import looks_corporate, first_author_ok  # noqa: E402
 
 INTEXT = {
     # basic forms
@@ -159,6 +160,39 @@ INTEXT_STRIP = {
 }
 
 
+# Grey literature must be routed away from Crossref, which indexes almost none of it.
+# Both of the worst false matches were here: ASIC's 2023 report matched a 2013 court
+# case, NHMRC's 2023 statement a 1993 article. Note the lowercase "and" in both - a
+# capitalised-words-only pattern stops dead at it and classifies neither.
+CORPORATE_CASES = {
+    "Australian Securities and Investments Commission. (2023). Review.": True,
+    "National Health and Medical Research Council. (2023). Statement.": True,
+    "Australian Securities Exchange. (2023). ASX investor study.": True,
+    "International Organization of Securities Commissions. (2025). DEP.": True,
+    "Financial Conduct Authority. (2024). Digital engagement practices.": True,
+    "Reserve Bank of Australia. (2024). Statement on monetary policy.": True,
+    "Smith, J. (2020). Title. Journal, 34(2), 118-142.": False,
+    "Hayes, A. F. (2022). Introduction to mediation.": False,
+    "van Rooij, M., Lusardi, A., & Alessie, R. (2011). Financial literacy.": False,
+    "Hollebeek, L. D. (2011a). Demystifying customer brand engagement.": False,
+}
+
+# A record with NO author array must FAIL the author check, not pass it vacuously.
+# Returning True for "nothing to check against" is what let a court case be matched
+# to a regulator report. Particle surnames must compare on letters only.
+AUTHOR_CASES = [
+    ({}, "Smith, J. (2020). Title.", False),
+    ({"author": []}, "Smith, J. (2020). Title.", False),
+    ({"author": [{"family": ""}]}, "Smith, J. (2020). Title.", False),
+    ({"author": [{"family": "Smith"}]}, "Smith, J. (2020). Title.", True),
+    ({"author": [{"family": "van Rooij"}]},
+     "van Rooij, M., Lusardi, A. (2011). Financial literacy.", True),
+    ({"author": [{"family": "Rooij"}]},
+     "van Rooij, M., Lusardi, A. (2011). Financial literacy.", True),
+    ({"author": [{"family": "Nguyen"}]}, "Smith, J. (2020). Title.", False),
+]
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     fails = []
@@ -177,6 +211,14 @@ def main():
         if got != expected:
             fails.append(("strip_intext", text, got, expected))
 
+    for line, expected in CORPORATE_CASES.items():
+        if looks_corporate(line) != expected:
+            fails.append(("corporate", line, not expected, expected))
+
+    for item, entry, expected in AUTHOR_CASES:
+        if first_author_ok(item, entry) != expected:
+            fails.append(("author-check", str(item)[:50], not expected, expected))
+
     for line, expected in ENTRY_STARTS.items():
         if bool(ENTRY_START.match(line)) != expected:
             fails.append(("entry-start", line, not expected, expected))
@@ -191,7 +233,7 @@ def main():
         if got != expected:
             fails.append(("ref_key", entry, got, expected))
 
-    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP) + len(ENTRY_STARTS)
+    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES) + len(AUTHOR_CASES)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

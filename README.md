@@ -8,7 +8,7 @@ cross-matching, resolving every link and DOI, word count against the stated rule
 numbering, prose humanising, and the task sheet's AI-use policy.
 
 Everything mechanical is a script. Python 3.8+, standard library only — no `pip install`,
-no dependencies, no API keys. Only link resolution touches the network.
+no dependencies, no API keys. Only link resolution and DOI lookup touch the network.
 
 ---
 
@@ -58,7 +58,7 @@ scores 78% produces a well-polished 78%.
 
 ## The scripts
 
-All four take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF — convert first.
+All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF — convert first.
 
 | Script | Does |
 |---|---|
@@ -66,13 +66,15 @@ All four take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF — co
 | `citecheck.py` | Cross-matches in-text citations against the reference list, both directions |
 | `linkcheck.py` | Resolves every URL and DOI; compares Crossref metadata against the reference entry |
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
-| `selftest.py` | 78 regression cases over the parsing regexes |
+| `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
+| `selftest.py` | 107 regression cases over the parsing regexes |
 
 ```bash
 python scripts/doctext.py   report.docx --count --limit 2000 --exclude-refs --exclude-intext
 python scripts/citecheck.py report.docx --style apa7
 python scripts/linkcheck.py report.docx --json links.json
 python scripts/figcheck.py  report.docx --source analysis.py
+python scripts/doifind.py   report.docx
 ```
 
 Exit codes are the same across all of them: `0` clean, `1` problems found, `2` could not
@@ -146,7 +148,7 @@ something in the work is ambiguous enough that markers read it differently.
 ## Contributing
 
 The parsing regexes are the fragile part. Run `python scripts/selftest.py` after touching
-any of them — 78 cases, and a good number of them are defects that reached working code:
+any of them — 107 cases, and a good number of them are defects that reached working code:
 `n.d.` matching the "nd" inside "and", `Nguyen et al. (2021)` going undetected entirely,
 `However, Nguyen…` keying on "However", `summaris\b` failing to match "summarises",
 surnames like An, So and Ho being filtered out as stopwords, and `[3]–[7]` ranges
