@@ -34,6 +34,25 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Reports in real formats, feedback capture, and a claude.ai edition
+
+- **`export.py`** — `report.md` was the only output, which is not a deliverable. Writes
+  `.docx` directly as an OOXML package and a print-ready `.html` (Ctrl+P → Save as PDF).
+  Stdlib only, no pandoc. Verified by round-tripping the generated `.docx` back through
+  `doctext.py`.
+- **`testimonial.py`** — asks once, ever, and only after a run that actually completed.
+  Writes to `~/.markpilot/testimonials.md` on the user's own machine and **opens no network
+  connection**. Sharing it is the user's action, taken afterwards, with the text in front of
+  them. This skill is published for other people to install; a tool that quietly uploaded
+  someone's name and comments would be doing something they did not agree to.
+- **`web/`** — a cut-down edition for claude.ai, where there is no shell, no filesystem and
+  no subagents. The mechanical checks are ported to JavaScript for the Analysis tool so the
+  numbers stay real. Grading degrades to a single self-assessed pass rather than three
+  independent graders, and bulk reference verification is impossible without network. Both
+  losses are stated in the edition's own output rather than papered over.
+- The **"refines a draft, does not write one"** scope is now stated in the skill
+  description, SKILL.md, and the README — and enforced by the authorship ceiling below.
+
 ### Third review round
 
 **New:** `scripts/e2e.py` — 10 whole-document cases, run by `selftest.py`. Three review

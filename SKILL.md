@@ -686,9 +686,60 @@ Variants that must be used when they apply:
   is not run here. Say so under NOT CHECKED rather than letting a reader assume it was
   covered.
 
+### Export it
+
+`report.md` is not a deliverable on its own. Convert it:
+
+```bash
+python scripts/export.py .markpilot/<docname>/report.md
+```
+
+Writes `report.docx` and a print-ready `report.html` (open it, Ctrl+P, Save as PDF).
+Stdlib only — the .docx is written directly as an OOXML package. Do the same for
+`changes.md`, `reference-dois.md` and the AI declaration if the user will act on them
+away from the terminal, and tell them where all three formats are.
+
 Report the governing (lowest) score, not the flattering one. The LINKS numerator can
 never exceed the script's `LIVE` count. Any step skipped, or run under `--report-only`,
 or that exited `2`, appears in the report as such — never as a pass.
+
+## Step 10 — Feedback (once, ever)
+
+```bash
+python scripts/testimonial.py --check     # exit 0 = ask, exit 1 = stay quiet
+```
+
+**Only run this when all of the following hold.** Otherwise skip it silently and say
+nothing:
+
+- the pipeline completed through Step 9;
+- nothing exited `2` unresolved, and the user was not left with a blocked gate;
+- `--check` returned `0`;
+- this is not a `--report-only` or `--quick` run.
+
+Asking for a recommendation after a run that failed, stalled, or could not check half the
+references is worse than never asking.
+
+If it returns `0`, ask **once**, with AskUserQuestion, in one question — not a sequence.
+Offer: *leave a short comment*, *rate it only*, *no thanks*. Then:
+
+```bash
+python scripts/testimonial.py --save --name "..." --role "..." \
+    --rating 5 --stamp "<today>" --comment "..."
+python scripts/testimonial.py --decline          # if they said no
+```
+
+Either branch marks the state, so it never asks again on any future run, in any project.
+
+**What it does with the answer:** writes it to `~/.markpilot/testimonials.md` on the
+user's own machine and prints the path. **It sends nothing anywhere.** The script opens no
+network connection. If the user wants the author to see it, the output gives them a link
+to do that themselves, with the text in front of them.
+
+That constraint is not squeamishness. This skill is published for other people to install,
+and a tool that quietly uploaded someone's name and comments would be doing something they
+did not agree to. Do not add a send step, do not offer to email it, and do not ask a second
+time if they decline.
 
 ## Flags
 
@@ -712,7 +763,11 @@ or that exited `2`, appears in the report as such — never as a pass.
 
 Written under `.markpilot/<docname>/`: `rubric.md`, `constraints.md`, `text.txt`,
 `grades-round-N-<stance>.md`, `draft-round-N.txt`, `budget.txt`, `links.json`,
-`doifind.json`, `changes.md`, `report.md`.
+`doifind.json`, `changes.md`, `report.md` — plus the `.docx` / `.html` that
+`export.py` makes from them.
+
+State that must outlive a reinstall (the Step 10 flag) lives in `~/.markpilot/`,
+outside the skill directory and outside git.
 
 `scripts/selftest.py` (which also runs `scripts/e2e.py`) guards the parsing regexes,
 which are the fragile part

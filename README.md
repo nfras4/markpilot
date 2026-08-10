@@ -90,6 +90,8 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
 | `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
+| `export.py` | Turns any report into `.docx` and a print-ready `.html` (Ctrl+P → PDF) |
+| `testimonial.py` | One-time, opt-in, local-only feedback capture — sends nothing anywhere |
 | `selftest.py` | Regression cases over the parsing regexes, plus `e2e.py` — run it, it prints the count |
 
 ```bash
@@ -99,6 +101,7 @@ python scripts/linkcheck.py report.docx --json links.json
 python scripts/figcheck.py  report.docx --source analysis.py
 python scripts/doifind.py   report.docx
 python scripts/quotecheck.py report.docx --list
+python scripts/export.py    .markpilot/report.md      # -> .docx and print-ready .html
 ```
 
 Exit codes: `0` clean, `1` problems found, `2` **could not check** — which is never a
@@ -144,6 +147,14 @@ An untouched matplotlib figure contains no hex literals at all — the colours c
 rcParams, not the source — so scanning for hex codes alone reports "clean" on precisely
 the input the check exists to catch. Writing a hex value is evidence somebody made a
 colour decision. Writing none is evidence nobody did.
+
+## Using it in claude.ai instead
+
+There is a cut-down edition in [`web/`](web/) for plain Claude, where there is no shell and
+no subagents. The mechanical checks are ported to JavaScript for the Analysis tool so the
+numbers stay real; grading becomes a single self-assessed pass rather than three
+independent graders, and bulk reference verification is not possible at all. Both losses
+are stated in its output rather than papered over. See [`web/README.md`](web/README.md).
 
 ## What it will not do
 
