@@ -3,16 +3,16 @@
 
 Stdlib only. No pandoc, no LibreOffice, no pip install.
 
-    python export.py report.md                 # writes report.docx and report.html
-    python export.py report.md --docx-only
-    python export.py report.md --html-only
+    python export.py report.md                 # writes report.docx AND report.pdf
+    python export.py report.md --pdf
+    python export.py report.md --all           # .docx + .pdf + .html
     python export.py report.md -o ~/Desktop/markpilot-report
 
-The .docx is written directly as an OOXML package (it is a zip of XML), which is
-why this needs no dependencies. The .html is styled for printing: open it in a
-browser and use Ctrl+P -> Save as PDF. That is deliberately the PDF path - a real
-PDF writer is thousands of lines and every browser already has one that embeds
-fonts correctly.
+No dependencies at all: the .docx is written directly as an OOXML package (a zip
+of XML), and the .pdf is written directly too (see pdfwrite.py), using the
+base-14 fonts every reader must provide so nothing needs embedding. The .html is
+a print-friendly extra for anyone who would rather use a browser's own PDF
+export, which does handle full Unicode.
 
 Handles the subset markpilot's own outputs use: headings, paragraphs, bullet and
 numbered lists, fenced code blocks, tables, block quotes, horizontal rules,
@@ -25,6 +25,9 @@ import os
 import re
 import sys
 import zipfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pdfwrite  # noqa: E402
 
 W = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
 
@@ -312,8 +315,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("markdown")
     ap.add_argument("-o", "--out", default="", help="output basename (no extension)")
-    ap.add_argument("--docx-only", action="store_true")
-    ap.add_argument("--html-only", action="store_true")
+    ap.add_argument("--docx", action="store_true", help="write .docx")
+    ap.add_argument("--pdf", action="store_true", help="write .pdf")
+    ap.add_argument("--html", action="store_true", help="write print-ready .html")
+    ap.add_argument("--all", action="store_true", help="all three")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -325,18 +330,26 @@ def main():
     base = args.out or os.path.splitext(args.markdown)[0]
     title = next((p for k, p in blocks if k == "h1"), os.path.basename(base))
 
+    want_docx = args.docx or args.all
+    want_pdf = args.pdf or args.all
+    want_html = args.html or args.all
+    if not (want_docx or want_pdf or want_html):
+        want_docx = want_pdf = True          # no flags: both real formats
+
     made = []
-    if not args.html_only:
+    if want_docx:
         to_docx(blocks, base + ".docx")
         made.append(base + ".docx")
-    if not args.docx_only:
+    if want_pdf:
+        pages = pdfwrite.write(blocks, base + ".pdf", title)
+        made.append(f"{base}.pdf ({pages} page{'s' if pages != 1 else ''})")
+    if want_html:
         to_html(blocks, base + ".html", title)
         made.append(base + ".html")
 
     for m in made:
-        print(f"  wrote {m}  ({os.path.getsize(m):,} bytes)")
-    if any(m.endswith(".html") for m in made):
-        print("\n  For PDF: open the .html and press Ctrl+P -> Save as PDF.")
+        path = m.split(" (")[0]
+        print(f"  wrote {m}  [{os.path.getsize(path):,} bytes]")
     return 0
 
 

@@ -34,6 +34,32 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Intake interview, real PDF, and the grading loop verified end to end
+
+- **`pdfwrite.py`** — a real `.pdf`, written directly, no browser and no dependencies.
+  "Open the HTML and press Ctrl+P" was not a PDF. Uses the base-14 fonts every reader must
+  provide, so nothing needs embedding, and breaks lines on the actual Helvetica advance
+  widths rather than an averaged guess. Validated structurally: header, xref table,
+  trailer, `startxref` resolving to `xref`, correct page count.
+- **Step 0 now interviews the user** before any work starts, in one AskUserQuestion:
+  *how should the report be delivered* (Word / PDF / both / markdown) and *how many
+  fix-and-regrade rounds* (1 / 3 / until it clears, max 6 / report only). Both were
+  previously assumed. Asking the export format at the end means re-running it after the
+  user has stopped paying attention; asking the round count after four rounds have run is
+  worse.
+- The **until-it-clears cap is 6 and not optional**, because the loop is not monotonic: a
+  fix that closes one criterion can open another, so the best round is not necessarily the
+  last. Step 2d keeps the best-scoring draft and the report names which round it came from.
+
+**The grading loop was executed for the first time, against a purpose-built fixture** (a
+deliberately descriptive 294-word draft and a 4-criterion weighted rubric). Three graders
+in fresh contexts returned the structured table with quoted band descriptors and quoted
+evidence; they scored 71 / 70 / 67, so the governing score was 67 and the 4-point spread
+sat under the 8-point ambiguity threshold; all three independently identified the same
+criterion as the largest gap. `quotecheck` confirmed all four of the hostile marker's
+quoted spans against the document, and rejected a fabricated one. The orchestration works
+as documented.
+
 ### Reports in real formats, feedback capture, and a claude.ai edition
 
 - **`export.py`** — `report.md` was the only output, which is not a deliverable. Writes

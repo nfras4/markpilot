@@ -14,7 +14,7 @@ description: |
   criteria sheet. Refines an EXISTING draft - it never generates an assignment,
   and it flags anything needing the author's own position or evidence rather
   than inventing it.
-argument-hint: "[document] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill]"
+argument-hint: "[document] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3] [--format both] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill]"
 allowed-tools:
   - Read
   - Write
@@ -124,7 +124,45 @@ failing — see the Step 3 gate.
 
 ## Step 0 — Intake
 
-You need three things. Ask for whatever is missing in one AskUserQuestion, not three.
+You need three things, plus one preference. **Ask in a single AskUserQuestion call** —
+one call carrying several questions, not several calls. Do not ask them one at a time
+across separate turns.
+
+**Always ask the export format**, even when every input was found automatically. It is the
+one thing that cannot be inferred, it decides what the user actually receives at Step 9,
+and asking at the end means re-running the export after they have stopped paying attention.
+
+| Question | Options |
+|---|---|
+| How should the report be delivered? | **Word (.docx)** · **PDF** · **Both** · Markdown only |
+| How many fix-and-regrade rounds? | **1 (one pass)** · **3 (default)** · **Until it clears the target (max 6)** · **0 — report only** |
+
+Ask both **before the grade gate starts**, not after. Each round costs three graders and a
+fix pass, and a user who wanted one pass should not discover that after four have run.
+Skip the rounds question only if `--rounds` or `--report-only` was passed explicitly.
+
+On the rounds options:
+
+- **1** — grade, fix once, regrade. Enough to catch the obvious gaps.
+- **3** — the default. Diminishing returns beyond it in practice.
+- **Until it clears (max 6)** — the cap is not arbitrary. **Scores can go down**: a fix that
+  closes one criterion can open another, so "keep going until it clears" is not monotonic
+  and can oscillate. Keep the best-scoring draft (Step 2d) and stop at 6 regardless,
+  reporting the best round rather than the last.
+- **0** — behaves as `--report-only`: findings, no edits.
+
+Record both answers in `constraints.md` and honour them. Notes on the export options:
+
+- **Word** — a real `.docx`, editable, good if they want to paste findings into their own
+  notes.
+- **PDF** — a real `.pdf`, written directly, no browser step. Fixed layout, good for
+  sending to someone or printing. Non-Latin characters degrade to ASCII, because base-14
+  PDF fonts have no glyphs for them; if the report will contain any, add `--html` and let
+  the browser's own PDF export handle it.
+- **Both** is the safe default when they have no preference.
+- **Markdown only** if they will read it in the terminal or a notes app.
+
+Now the inputs:
 
 | Input | Why | If absent |
 |---|---|---|
@@ -324,8 +362,13 @@ what makes the claim true.
 New subagents, same brief, same three stances. They must not receive the change log, the
 previous scores, or any argument about why the work is better.
 
-Loop up to `--rounds` (default 3), where one round is one fix-and-regrade cycle — so the
-default is up to four grading passes including the first.
+Loop up to the number chosen at Step 0 (or `--rounds`, default 3), where one round is one
+fix-and-regrade cycle — so 3 rounds is up to four grading passes including the first. An
+explicit `--rounds` on the command line overrides the interview answer; say which governed
+in the report.
+
+If the user chose **until it clears**, stop at **6** regardless and report the best round.
+The cap exists because the loop is not monotonic — see below.
 
 **Keep the best draft.** Save each round's document alongside its score. Scores can go
 down: a fix that closes one criterion can open another. If the final round scores lower
@@ -640,7 +683,7 @@ MARKPILOT — <document>
 ──────────────────────────────────────────────────────────────────────
 SOURCE     graded on .markpilot/<doc>/draft-round-2.txt (4,690 words extracted)
            your .docx is UNMODIFIED — apply changes.md to it
-TARGET     95% (--target), 3 rounds max
+TARGET     95% (--target) · 3 rounds (chosen at intake) · export: both
 
 GRADE      96% estimated  (round 2 of 3; LOWEST of 3 graders; spread 4 pts)   by agents
            lit-review 14/15 · analysis 29/30 · evidence 19/20 · structure 10/10
@@ -690,14 +733,21 @@ Variants that must be used when they apply:
 
 `report.md` is not a deliverable on its own. Convert it:
 
+Use the format they chose at Step 0:
+
 ```bash
-python scripts/export.py .markpilot/<docname>/report.md
+python scripts/export.py .markpilot/<doc>/report.md            # .docx + .pdf
+python scripts/export.py .markpilot/<doc>/report.md --docx     # Word only
+python scripts/export.py .markpilot/<doc>/report.md --pdf      # PDF only
+python scripts/export.py .markpilot/<doc>/report.md --all      # + print-ready .html
 ```
 
-Writes `report.docx` and a print-ready `report.html` (open it, Ctrl+P, Save as PDF).
-Stdlib only — the .docx is written directly as an OOXML package. Do the same for
-`changes.md`, `reference-dois.md` and the AI declaration if the user will act on them
-away from the terminal, and tell them where all three formats are.
+Both the `.docx` and the `.pdf` are written directly, with no dependencies. Do the same
+for `changes.md`, `reference-dois.md` and the AI declaration whenever the user will act on
+them away from the terminal — a change list they cannot open in Word is a change list they
+will not apply. Then tell them the paths.
+
+Skip this only if they chose *Markdown only*.
 
 Report the governing (lowest) score, not the flattering one. The LINKS numerator can
 never exceed the script's `LIVE` count. Any step skipped, or run under `--report-only`,
@@ -749,7 +799,8 @@ time if they decline.
 | `--task FILE` | path to the assignment brief |
 | `--style` | `apa7`, `harvard`, `ieee`, `chicago`, `mla`, `vancouver`, `aglc`, `unknown` |
 | `--target N` | gate threshold, default 95. Used in 2a/2d and stated in the report |
-| `--rounds N` | max fix-and-regrade cycles, default 3 |
+| `--format` | `docx` / `pdf` / `both` / `md` — overrides the Step 0 answer for step 9 |
+| `--rounds N` | max fix-and-regrade cycles. Overrides the Step 0 answer; default 3, hard cap 6 |
 | `--source FILE…` | plotting source to scan in step 5 |
 | `--report-only` | change nothing at any step; findings only |
 | `--quick` | one grader (hostile second marker stance). Report says "indicative only"; the gate is not cleared |
