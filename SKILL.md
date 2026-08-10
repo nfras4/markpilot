@@ -168,6 +168,26 @@ a percentage target is undefined. Say so, and convert the gate to: *every criter
 in the top band, and any that does not is named*. Do not invent weights to manufacture a
 number.
 
+### If there is no rubric at all
+
+This is common and it is not a reason to stop. Many courses publish no A1 rubric; the
+detail lives in the briefing deck instead. Do **not** invent criteria, and do **not**
+report a percentage.
+
+Build a **requirements checklist** from the task sheet instead — every "must contain",
+every required section, every stated word budget, every named appendix — and run the
+graders against that. Their question becomes *is each required element present and
+adequate*, not *what mark is this*.
+
+Report it as **requirements compliance, not a grade**, with no percentage anywhere, and
+say plainly that no rubric was available and where you looked. A compliance pass is
+genuinely useful — most marks lost on a proposal are lost to a missing required element,
+not to weak argument — but it is a different claim, and presenting it as a grade would be
+a fabrication.
+
+Then tell the user the rubric is worth chasing, because the grade gate is the part of
+this pipeline that actually predicts the mark.
+
 ### 2b. Grade with independent agents
 
 Extract the text first: `python scripts/doctext.py FILE --text > .markpilot/<doc>/text.txt`.
@@ -303,8 +323,13 @@ you could not. That count goes in the report.
 citation claims, ask rather than guess.
 
 **The gate:** step 3 passes when `citecheck.py` and `linkcheck.py` both exit `0`, every
-non-`LIVE` item has been individually opened and confirmed, and the quote/statistic
-tally has no unchecked entries. Anything short of that is reported as unconfirmed, by
+non-`LIVE` item has been individually opened and confirmed, the quote/statistic tally has
+no unchecked entries, and the **REFERENCE COVERAGE** line accounts for every entry.
+
+Coverage is the one people miss. A list of 30 print-only entries yields six live URLs and
+"6/6 resolve", which reads as a pass while 24 sources were checked by nothing at all.
+`linkcheck` now exits `2` when most of the list carries no identifier — treat that as
+*could not check*, and either add the DOIs or verify those entries by hand. Anything short of that is reported as unconfirmed, by
 name. Never reformat an entry you could not verify — a well-formatted invented source is
 still an invented source.
 
@@ -328,6 +353,31 @@ There is no default tolerance: a stated limit is a limit. `--tolerance N` exists
 only use it when the task sheet states one, and report the signed delta as authoritative
 over the WITHIN/OVER word. Do not use Word's own count as the authority — it counts
 headings, captions, table contents and the reference list.
+
+**Headings and captions are almost never addressed by the task sheet, and they move the
+number.** On a real 2,000-word proposal the difference was 2,063 with them and 2,008
+without — over the limit either way, but by 63 or by 8, which are different problems.
+Run it both ways and **report both**, saying which rule the task sheet actually states
+(usually none). Do not silently pick the flattering one.
+
+### Per-section budgets
+
+If the task sheet gives a word budget per section — many briefing decks do — check it.
+A total that lands on the limit can hide one section 30% over and another 30% under, and
+the per-section budget is the rule the marker has in front of them.
+
+Write the budget to `.markpilot/<docname>/budget.txt`, one `Section prefix = N` per line,
+then:
+
+```bash
+python scripts/doctext.py FILE --count --limit 2000 --exclude-refs --exclude-appendix \
+    --budget .markpilot/<docname>/budget.txt
+```
+
+It prints budget / actual / delta per section, flags anything outside tolerance, and
+lists sections with no budget line so nothing is silently unaccounted for. A section
+short of its budget is as much a finding as one over: it usually means a required
+element is thin, and the graders in Step 2 should have said so independently.
 
 **If the count is over**, cut from the lowest-value material, never from a criterion the
 rubric weights. Padding hides in the introduction, restated topic sentences, and long
@@ -356,6 +406,14 @@ matplotlib figure contains no hex literals at all, because the colours come from
 rcParams rather than the source, so scanning for hex codes alone reports clean on
 exactly the input this check exists to catch. Without `--source` nothing about styling
 is checked, and the report must say so.
+
+**Look for the plotting source before assuming there is none.** Figures usually arrive as
+`.png` files in a `figures/` folder with the code that made them sitting elsewhere — a
+notebook, a script, another repo. Check the document's folder and its siblings. If the
+code genuinely does not exist (the chart was made in Excel, drawn by hand, or pasted from
+a source), say **"chart styling not checked — no plotting source"** in the report rather
+than letting a silent skip read as a pass. That is the same failure mode as everything
+else here: nothing checked it, so nothing may claim it.
 
 Then read `references/charts.md`, which is authoritative on chart styling. The headline
 points: match the document's body font and text-column width so the figure needs no
@@ -472,12 +530,13 @@ or that exited `2`, appears in the report as such — never as a pass.
 | `--no-humanise` | skip step 6 and its re-grade |
 | `--no-figures` | skip step 5 |
 | `--link-timeout N` | seconds per fetch, default 20 — raise on a slow connection |
+| `--budget FILE` | per-section word budget for step 4 (`Section prefix = N` per line) |
 
 ## Files
 
 Written under `.markpilot/<docname>/`: `rubric.md`, `constraints.md`, `text.txt`,
-`grades-round-N.md`, `links.json`, `changes.md`, `report.md`.
+`grades-round-N.md`, `budget.txt`, `links.json`, `changes.md`, `report.md`.
 
-`scripts/selftest.py` (78 cases) guards the parsing regexes, which are the fragile part
+`scripts/selftest.py` (90 cases) guards the parsing regexes, which are the fragile part
 of this skill — several of those cases are defects that reached working code. Run it
 after editing any regex in `doctext.py`, `citecheck.py` or `figcheck.py`.

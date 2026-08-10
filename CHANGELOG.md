@@ -34,6 +34,22 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Workflow gaps found by the first real run
+
+- **Reference coverage was not reported at all.** A list where only 6 of 29 entries
+  carried a DOI or URL produced "6/6 confirmed to resolve" and exit `0`, so the Step 3
+  gate passed while 23 sources were checked by nothing. `linkcheck` now prints a
+  REFERENCE COVERAGE line and exits `2` when most of the list has no identifier.
+- **Only the total word count was checked.** Where a task sheet gives a per-section
+  budget, a total that lands on the limit can hide one section well over and another
+  well under. `doctext --budget FILE` now checks each section.
+- **Headings and captions were silently in or out.** They moved a real count from 2,063
+  to 2,008 against a 2,000 limit. The skill now requires reporting both.
+- **No path when the course publishes no rubric.** The grade gate simply could not run.
+  There is now a documented fallback: build a requirements checklist from the task sheet
+  and report compliance, explicitly not a grade and with no percentage.
+- **A missing `--source` read as a clean chart check.** Now reported as not checked.
+
 ### Fixed on the first real submission it was run against
 
 - A `Heading2` inside an appendix ended the appendix, so the rest counted against the

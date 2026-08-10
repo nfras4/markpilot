@@ -432,6 +432,87 @@ def count_report(paras, args):
     return total_all, counted, removed, ref_entries, styled_headings
 
 
+def parse_budget(path):
+    """`Section prefix = N` per line; blank lines and # comments ignored."""
+    out = []
+    for line in open(path, encoding="utf-8-sig"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        name, _, n = line.rpartition("=")
+        try:
+            out.append((name.strip(), int(re.sub(r"[^\d]", "", n))))
+        except ValueError:
+            continue
+    return out
+
+
+def strip_numbering(t):
+    return re.sub(r"^\s*(?:[0-9]+(?:\.[0-9]+)*\s*[.):]?\s+)", "", t.strip())
+
+
+def section_report(paras, budget, tolerance):
+    """Words per top-level section, against a per-section budget.
+
+    A total that lands on the limit can hide a section 30% over and another 30%
+    under. Where the task sheet gives a per-section budget, that budget is the
+    rule and the total is a consequence of it."""
+    counts, order = {}, []
+    current = None
+    for p in paras:
+        t = p.text.strip()
+        if not t:
+            continue
+        if is_section_break(t, "refs", p.in_table) or is_section_break(t, "appendix", p.in_table):
+            current = None
+            continue
+        if p.is_heading and p.heading_level <= 1:
+            current = strip_numbering(t)
+            counts.setdefault(current, 0)
+            order.append(current)
+            continue
+        if current is not None:
+            counts[current] += len(words(t))
+
+    print("\nSECTION BUDGET")
+    rows, matched = [], set()
+    for name, want in budget:
+        hit = None
+        for h in order:
+            if h.lower().startswith(name.lower()) or name.lower() in h.lower():
+                hit = h
+                break
+        got = counts.get(hit, 0) if hit else 0
+        rows.append((name, want, got, hit))
+        if hit:
+            matched.add(hit)
+    total_want = sum(r[1] for r in rows)
+    total_got = sum(r[2] for r in rows)
+    print(f"  {'section':<38}{'budget':>8}{'actual':>8}{'delta':>8}")
+    problems = 0
+    for name, want, got, hit in rows:
+        d = got - want
+        flag = ""
+        if not hit:
+            flag = "  <- NOT FOUND in the document"
+            problems += 1
+        elif abs(d) > want * tolerance / 100:
+            flag = "  <-"
+            problems += 1
+        print(f"  {name[:37]:<38}{want:>8,}{got:>8,}{d:>+8,}{flag}")
+    print(f"  {'TOTAL (budgeted sections only)':<38}{total_want:>8,}{total_got:>8,}"
+          f"{total_got - total_want:>+8,}")
+    unbudgeted = [h for h in order if h not in matched]
+    if unbudgeted:
+        print("\n  Sections with no budget line (still counted in the total above only")
+        print("  if you budgeted them):")
+        for h in unbudgeted:
+            print(f"    {h[:60]}  ({counts.get(h, 0)} words)")
+    return problems
+
+
 FLAG_LABEL = {
     "exclude_refs": "references section", "exclude_appendix": "appendix section",
     "exclude_headings": "headings", "exclude_tables": "tables",
@@ -457,6 +538,9 @@ def main():
     ap.add_argument("--exclude-quotes", action="store_true")
     ap.add_argument("--exclude-captions", action="store_true")
     ap.add_argument("--exclude-footnotes", action="store_true")
+    ap.add_argument("--budget", default="",
+                    help="file of `Section prefix = N` lines; checks each section "
+                         "against a per-section word budget")
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
@@ -529,6 +613,11 @@ def main():
         print()
         print("  NOTE: exclusions applied were only the ones you passed as flags.")
         print("  Confirm them against the task sheet's own wording before reporting.")
+
+    if args.budget:
+        if not os.path.exists(args.budget):
+            sys.exit(f"error: no such budget file: {args.budget}")
+        section_report(paras, parse_budget(args.budget), args.tolerance or 10.0)
     return 0
 
 

@@ -330,7 +330,18 @@ def main():
         sys.exit(f"error: no such file: {args.file}")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    items = harvest(load(args.file))
+    paras = load(args.file)
+    items = harvest(paras)
+
+    # Reference COVERAGE, not just link status. A list of 30 print-only or
+    # DOI-less entries yields 6 live URLs and "6/6 confirmed", which reads as a
+    # pass while 24 sources were never checked by anything. The denominator that
+    # matters is reference entries, not links found.
+    _body, _refs = split_sections(paras)
+    entries = ref_entries(_refs)
+    with_id = [e for e in entries
+               if URL_RE.search(e) or DOI_RE.search(e)]
+    coverage = (len(with_id), len(entries))
     if args.urls_only:
         items = [i for i in items if i[0] == "url"]
     if args.dois_only:
@@ -398,7 +409,21 @@ def main():
     human = sum(len(by.get(s, [])) for s in NEEDS_HUMAN)
     verified = len(by.get(LIVE, []))
 
-    print(f"\n  {verified}/{len(results)} confirmed to resolve to a real page.")
+    print(f"\n  {verified}/{len(results)} of the links and DOIs found resolve to a real page.")
+
+    have, total = coverage
+    if total:
+        gap = total - have
+        print(f"\n  REFERENCE COVERAGE  {have}/{total} entries carried a DOI or URL to check.")
+        if gap:
+            print(f"    {gap} reference entr{'y' if gap == 1 else 'ies'} had NOTHING for this")
+            print("    script to verify. They are NOT confirmed by this run, and the count")
+            print("    above says nothing about them. Check them by hand.")
+            if have * 2 < total:
+                print("    Most of the list is unverifiable this way. If these are journal")
+                print("    articles they almost certainly have DOIs - APA 7 and Harvard both")
+                print("    want one wherever it exists, and adding them makes the list")
+                print("    checkable as a side effect.")
     if fatal:
         print(f"  {fatal} MUST be fixed - dead, unregistered, or resolving to the wrong source.")
     if human:
@@ -407,10 +432,21 @@ def main():
 
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2)
+            json.dump({"coverage": {"entries_with_identifier": coverage[0],
+                                    "reference_entries": coverage[1]},
+                       "results": results}, f, indent=2)
         print(f"\n  wrote {args.json_out}")
 
-    return 1 if fatal else (2 if human else 0)
+    if fatal:
+        return 1
+    if human:
+        return 2
+    # Everything found resolved - but if most of the reference list had no
+    # identifier, this run does not establish that the references are sound, and
+    # exit 0 would be read as if it did.
+    if coverage[1] and coverage[0] * 2 < coverage[1]:
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
