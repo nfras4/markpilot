@@ -43,8 +43,8 @@ import urllib.request
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from doctext import load, norm  # noqa: E402
-from citecheck import split_sections, ref_entries  # noqa: E402
+from doctext import load, norm, die  # noqa: E402
+from citecheck import split_sections, ref_entries, author_matches  # noqa: E402
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -254,8 +254,9 @@ def check_doi(doi, context, timeout, msg=None):
 
     ctx = norm(context).lower()
     problems = []
-    if first and first.lower() not in ctx:
-        problems.append(f"first author '{first}' not in the entry")
+    if not author_matches(msg, context):
+        who = first or "(no author on record)"
+        problems.append(f"no author from the record ('{who}') appears in the entry")
     if year and year not in ctx:
         # allow +/-1 year: online-first vs issue year is a real, common, benign case
         if not any(str(int(year) + d) in ctx for d in (-1, 1)):
@@ -327,7 +328,7 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit(f"error: no such file: {args.file}")
+        die(f"error: no such file: {args.file}")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     paras = load(args.file)

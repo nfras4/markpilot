@@ -39,8 +39,9 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from doctext import load, norm  # noqa: E402
-from citecheck import split_sections, ref_entries, ref_key, surname  # noqa: E402
+from doctext import load, norm, die  # noqa: E402
+from citecheck import (split_sections, ref_entries, ref_key,  # noqa: E402
+                       author_matches)
 
 UA = "markpilot-doifind/1.0 (https://github.com/nfras4/markpilot; mailto:markpilot@local)"
 DOI_IN = re.compile(r"(?i)\b10\.\d{4,9}/[^\s<>\"'\]\),;]+")
@@ -107,29 +108,9 @@ def letters(s):
 
 
 def first_author_ok(item, entry):
-    """Conservative: no author on the record means the check CANNOT pass.
-
-    Returning True for "nothing to check against" is a vacuous pass, and it is
-    exactly where the worst matches came from - ASIC's 2023 report matched to
-    'ASIC v Ingleby', a 2013 court case, and NHMRC's 2023 statement to a 1993
-    article. Both records carry no author array, so the only evidence that would
-    have caught them was the one being skipped.
-
-    Compared on letters only, so 'van Rooij' matches 'van rooij' and 'Van Rooij'.
-    Substring-matching the raw family name fails on every particle surname."""
-    authors = item.get("author") or []
-    if not authors:
-        return False
-    fam = authors[0].get("family") or ""
-    if not fam:
-        return False
-    e = letters(entry)
-    f = letters(fam)
-    if f and f in e:
-        return True
-    # "van Rooij" -> also accept the substantive part alone
-    tail = letters(fam.split()[-1]) if fam.split() else ""
-    return bool(tail) and len(tail) >= 3 and tail in e
+    """Delegates to citecheck.author_matches - see the failure modes documented
+    there. Kept as a name because selftest and the docs refer to it."""
+    return author_matches(item, entry)
 
 
 CORPORATE = re.compile(
@@ -220,7 +201,7 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit(f"error: no such file: {args.file}")
+        die(f"error: no such file: {args.file}")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     _body, refs = split_sections(load(args.file))
@@ -286,7 +267,13 @@ def main():
             json.dump(results, f, indent=2)
         print(f"\n  wrote {args.json_out}")
 
-    return 1 if actionable else (2 if unresolved else 0)
+    # Nothing checked is not a pass. A list that is entirely grey literature
+    # yields zero verified entries, and exit 0 would report that as clean.
+    if actionable:
+        return 1
+    if unresolved or (grey and not by.get("FOUND", 0)):
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

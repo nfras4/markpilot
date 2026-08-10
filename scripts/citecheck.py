@@ -34,7 +34,8 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from doctext import load, words, REFS_RE, APPENDIX_RE, norm, is_section_break  # noqa: E402
+from doctext import (load, words, REFS_RE, APPENDIX_RE, norm,  # noqa: E402
+                     is_section_break, die)
 
 # The n.d. branch MUST require the periods. Written as `n\.?\s?d\.?` it matches the
 # "nd" inside "and", so every "Smith and Jones, 2020" - in text and in the reference
@@ -201,9 +202,65 @@ def ref_key(entry):
     am = re.match(r"(" + NAMECH + r"{2,}(?:\s+" + NAMECH + r"{2,})?)", head.strip(),
                   flags=re.UNICODE)
     a = surname(lead_surname(am.group(1), drop_connectives=False)) if am else ""
-    ym = re.search(YEAR, entry)
-    y = re.sub(r"[^0-9a-z]", "", ym.group(0).lower()) if ym else ""
+    # Prefer a parenthesised year, then any year NOT part of a decade form.
+    # A bare search lets "Rethinking the 1970s" win over the real 2019 - the
+    # [a-z]? even swallows the trailing "s" - producing a false YEAR MISMATCH and
+    # a false UNCITED REF on a correctly formatted entry.
+    y = ""
+    m2 = re.search(r"\(\s*((?:1[6-9]|20)\d{2}[a-z]?)\s*\)", entry)
+    if m2:
+        y = m2.group(1)
+    else:
+        for cand in re.finditer(r"(?:1[6-9]|20)\d{2}[a-z]?", entry):
+            tok = cand.group(0)
+            after = entry[cand.end():cand.end() + 1]
+            if tok.endswith("s") or after == "s":       # 1970s / 1990s
+                continue
+            y = tok
+            break
+        if not y and re.search(r"n\.\s?d\.?", entry, re.I):
+            y = "nd"
+    y = re.sub(r"[^0-9a-z]", "", y.lower())
     return a, (y or "nd")
+
+
+def entry_tokens(entry):
+    """Whole words of a reference entry, lowercased, letters only."""
+    return set(re.findall(r"[^\W\d_]{2,}", (entry or "").lower(), flags=re.UNICODE))
+
+
+def author_matches(item, entry):
+    """Does ANY author on the Crossref record appear in the entry, as a whole word?
+
+    Two failures this exists to prevent, both of which shipped:
+
+    1. A SUBSTRING test lets a short surname match anything. 'He' is inside 'the',
+       'other', 'when', 'research'; 'Ma' is inside 'formal', 'primary'. A record by
+       He et al. therefore 'matched' an entry authored by Smith, and the wrong DOI
+       was reported LIVE / FOUND at exit 0 - the exact false pass this project
+       exists to prevent.
+    2. A record with NO author array must fail, not pass vacuously. That is how a
+       regulator report matched a court case.
+
+    Checking every author, not just the first, matters because students reorder
+    authors and numeric styles put initials first."""
+    authors = item.get("author") or []
+    if not authors:
+        return False
+    toks = entry_tokens(entry)
+    if not toks:
+        return False
+    for a in authors:
+        fam = (a.get("family") or "").lower()
+        if not fam:
+            continue
+        # Particle and hyphenated surnames: any substantive part matching as a
+        # whole token is enough ("van Rooij" -> "rooij").
+        for part in re.split(r"[\s\-'’]+", fam):
+            part = re.sub(r"[^\w]", "", part, flags=re.UNICODE)
+            if len(part) >= 2 and part in toks:
+                return True
+    return False
 
 
 def org_letters(entry):
@@ -350,7 +407,7 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit(f"error: no such file: {args.file}")
+        die(f"error: no such file: {args.file}")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     paras = load(args.file)

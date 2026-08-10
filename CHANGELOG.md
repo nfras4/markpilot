@@ -34,6 +34,42 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Fixed after an independent review round
+
+Two CRITICAL false passes, both reproduced end to end, both regressions introduced by the
+*previous* round's fix:
+
+- **A substring author test let a short surname match anything.** `He` is inside "the",
+  "other", "when"; `Ma` is inside "formal". A Crossref record by He et al. therefore
+  "matched" an entry authored by Smith — so `linkcheck` reported a DOI resolving to a
+  *different paper* as `LIVE` at exit `0` (passing the documented Step 3 gate), and
+  `doifind` proposed that DOI at `FOUND` for a fabricated reference. Author matching is
+  now whole-token, checks every author rather than only the first, and is shared by both
+  scripts.
+- Three more **exit-0-on-nothing-checked** paths: `doifind` with an all-grey-literature
+  list, `figcheck` with no figures detected, and `figcheck` with a `--source` path that
+  does not exist. All now exit `2`.
+
+Also:
+
+- Unreadable input exited `1` ("problems found") in every script, including the path that
+  printed *"Do NOT treat this as an empty document or as a pass"*. Now `2` everywhere.
+- `figcheck`'s `2` meant "style tells found", contradicting the global contract. Style
+  tells are a finding (`1`); `2` is reserved for could-not-check.
+- One stray `color=` **in a comment** disabled the no-styling chart check for the whole
+  file. Comments and docstrings are stripped first.
+- `ref_key` took the first year-shaped token anywhere, so "Rethinking the 1970s … 2019"
+  keyed `1970s` — the `[a-z]?` even swallowed the trailing `s` — producing a false
+  YEAR MISMATCH plus a false UNCITED REF on a correct entry.
+- **SKILL.md's report template modelled an impossible state**: `linkcheck exit 0` beside
+  two BLOCKED links, when BLOCKED always yields `2`. And the Step 3 gate required both
+  scripts to exit `0`, which no document citing Springer, Elsevier, JSTOR or Wiley can
+  ever satisfy. The gate now states the triaged-`2` path explicitly.
+- The template also printed the blanket "all criteria re-confirmed" sentence that Step 7
+  explicitly forbids.
+- The selftest count was quoted as 78, 90 and 107 in three different files. The docs no
+  longer hard-code it.
+
 ### Added after the first real run
 
 - **`doifind.py`** — looks up reference entries that carry no DOI, in Crossref, by their

@@ -23,8 +23,8 @@ Two independent checks:
 
 Exit codes:
     0  nothing found
-    1  numbering or cross-reference problems
-    2  style tells only
+    1  problems found: numbering/cross-reference defects, or chart-styling tells
+    2  COULD NOT CHECK - no figures detected, or a --source path was missing
 """
 
 import argparse
@@ -34,7 +34,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from doctext import load, norm, is_section_break, is_caption_line  # noqa: E402
+from doctext import load, norm, is_section_break, is_caption_line, die  # noqa: E402
 
 KINDS = r"(?:Figure|Fig\.?|Table|Chart|Exhibit|Graph)"
 INTEXT_REF = re.compile(r"\b(" + KINDS + r")\s*([A-Z]?\d+(?:\.\d+)*)\b", re.I)
@@ -139,8 +139,10 @@ def check_document(path):
     problems = []
     print("FIGURES AND TABLES")
     if not captions and not refs:
-        print("  No figures or tables found.")
-        return []
+        print("  COULD NOT CHECK - no figures or tables were detected.")
+        print("  A document whose captions the parser cannot see (captions baked into")
+        print("  images, an unlucky text dump) looks exactly like one with no figures.")
+        return None
 
     for kind in ("figure", "table", "exhibit"):
         nums = [k[1] for k in captions if k[0] == kind]
@@ -209,14 +211,21 @@ def notebook_source(raw):
 
 
 def scan_source(paths):
-    hits = []
+    hits, missing = [], []
     for path in paths:
         if not os.path.exists(path):
-            print(f"  (skipped, not found: {path})")
+            missing.append(path)
+            print(f"  (skipped, NOT FOUND: {path})")
             continue
         raw = open(path, "rb").read().decode("utf-8", "replace")
         if path.endswith(".ipynb"):
             raw = notebook_source(raw)
+        # Strip comments and string literals before the styling test. A single
+        # `color=` inside a comment or docstring switched the no-styling check off
+        # for the entire file - and that check is the one that catches an untouched
+        # chart.
+        code = re.sub(r"(?m)#.*$", " ", raw)
+        code = re.sub(r"(?s)'''.*?'''|\"\"\".*?\"\"\"", " ", code)
         low = raw.lower()
 
         for name, hexlist in PALETTES.items():
@@ -226,7 +235,7 @@ def scan_source(paths):
                                    f"({', '.join(found[:4])})"))
 
         # The important one: charts drawn with no styling anywhere in the file.
-        if PLOT_CALL.search(raw) and not STYLING.search(raw):
+        if PLOT_CALL.search(code) and not STYLING.search(code):
             hits.append((path, "plotting calls with NO styling anywhere in the file - "
                                "this chart is pure library default (font, palette, "
                                "spines, size, DPI)"))
@@ -234,7 +243,7 @@ def scan_source(paths):
         for pat, msg in SOURCE_TELLS:
             if re.search(pat, raw):
                 hits.append((path, msg))
-    return hits
+    return hits, missing
 
 
 def main():
@@ -245,20 +254,27 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit(f"error: no such file: {args.file}")
+        die(f"error: no such file: {args.file}")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     problems = check_document(args.file)
+    undetectable = problems is None
+    problems = problems or []
 
-    hits = []
+    hits, missing = [], []
     if args.source:
         print("\nCHART STYLE TELLS")
-        hits = scan_source(args.source)
+        hits, missing = scan_source(args.source)
         if hits:
             for path, msg in hits:
                 print(f"    - {os.path.basename(path)}: {msg}")
             print("\n  See references/charts.md. Do NOT redraw a chart you cannot")
             print("  reproduce from its data - report it and leave it to the author.")
+        elif missing:
+            print("  COULD NOT CHECK - none of the source files were found:")
+            for m in missing:
+                print(f"    {m}")
+            print("  Nothing about chart styling was checked. This is not a pass.")
         else:
             print("  No default-palette or default-styling tells found.")
             print("  NOTE: this only sees the source you passed. A chart pasted in as")
@@ -266,7 +282,13 @@ def main():
     else:
         print("\n  (no --source given: chart styling was NOT checked)")
 
-    return 1 if problems else (2 if hits else 0)
+    # 1 = checked, found problems (numbering defects OR default-styling tells).
+    # 2 = could not check (no figures detected, or a --source path that is not there).
+    if problems or hits:
+        return 1
+    if undetectable or missing:
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

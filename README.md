@@ -53,8 +53,8 @@ Then in Claude Code:
 9  Report            what passed, what changed, what is still on the author
 ```
 
-The grade gate runs first because everything after it is polish, and polishing work that
-scores 78% produces a well-polished 78%.
+The grade gate runs first because it is the only step that changes the substance. The
+steps after it are mechanical, and fixing them does not move a rubric criterion.
 
 ## The scripts
 
@@ -67,7 +67,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `linkcheck.py` | Resolves every URL and DOI; compares Crossref metadata against the reference entry |
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
-| `selftest.py` | 107 regression cases over the parsing regexes |
+| `selftest.py` | Regression cases over the parsing regexes — run it, it prints the count |
 
 ```bash
 python scripts/doctext.py   report.docx --count --limit 2000 --exclude-refs --exclude-intext
@@ -77,8 +77,10 @@ python scripts/figcheck.py  report.docx --source analysis.py
 python scripts/doifind.py   report.docx
 ```
 
-Exit codes are the same across all of them: `0` clean, `1` problems found, `2` could not
-check.
+Exit codes: `0` clean, `1` problems found, `2` **could not check** — which is never a
+pass. Unreadable input always exits `2`, because nothing was read and so nothing can be
+claimed. `linkcheck` exiting `2` is routine for any document citing a paywalled
+publisher: `BLOCKED` means a human must open it, not that the link is broken.
 
 ### Link and DOI resolution
 
@@ -148,7 +150,7 @@ something in the work is ambiguous enough that markers read it differently.
 ## Contributing
 
 The parsing regexes are the fragile part. Run `python scripts/selftest.py` after touching
-any of them — 107 cases, and a good number of them are defects that reached working code:
+any of them. Most cases are defects that reached working code:
 `n.d.` matching the "nd" inside "and", `Nguyen et al. (2021)` going undetected entirely,
 `However, Nguyen…` keying on "However", `summaris\b` failing to match "summarises",
 surnames like An, So and Ho being filtered out as stopwords, and `[3]–[7]` ranges

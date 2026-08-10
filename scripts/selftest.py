@@ -17,7 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import is_caption_line, strip_intext, words, REFS_RE  # noqa: E402
-from doifind import looks_corporate, first_author_ok  # noqa: E402
+from doifind import looks_corporate  # noqa: E402
+from citecheck import author_matches  # noqa: E402
 
 INTEXT = {
     # basic forms
@@ -88,6 +89,11 @@ REFS = {
     "de Vries, A. (2021). Title.": ("vries", "2021"),
     "O'Brien, K. (2020). Title.": ("o'brien", "2020"),
     "Wilson, K. (n.d.). Undated source. Some Journal.": ("wilson", "nd"),
+    # A decade in the title must not beat the real year. "1970s" won, and the
+    # [a-z]? even swallowed the trailing "s", producing a false YEAR MISMATCH and a
+    # false UNCITED REF on a correctly formatted entry.
+    "Jones, A. Rethinking the 1970s. Oxford University Press, 2019.": ("jones", "2019"),
+    '[9] T. Nguyen, "A survey of 1990s methods," ACM, 2021.': ("nguyen", "2021"),
     # initials-first styles
     '[3] T. Nguyen, "A survey," ACM, 2021.': ("nguyen", "2021"),
     '[1] J. Smith and A. Jones, "Attention," IEEE, 2020.': ("smith", "2020"),
@@ -180,7 +186,20 @@ CORPORATE_CASES = {
 # A record with NO author array must FAIL the author check, not pass it vacuously.
 # Returning True for "nothing to check against" is what let a court case be matched
 # to a regulator report. Particle surnames must compare on letters only.
+# A SUBSTRING test lets a short surname match anything: "He" is inside "the",
+# "other", "when"; "Ma" is inside "formal". A record by He et al. therefore matched
+# an entry authored by Smith, and linkcheck reported the wrong DOI as LIVE at exit 0
+# while doifind proposed it at FOUND. Whole-token matching only.
+_SMITH = ("Smith, J. (2016). A deep residual approach to the recognition of "
+          "images. Journal of Vision Systems, 8(1), 10-25.")
 AUTHOR_CASES = [
+    ({"author": [{"family": "He"}]}, _SMITH, False),
+    ({"author": [{"family": "Ma"}]}, _SMITH, False),
+    ({"author": [{"family": "An"}]}, _SMITH, False),
+    ({"author": [{"family": "Li"}]}, _SMITH, False),
+    ({"author": [{"family": "Smith"}]}, _SMITH, True),
+    # any author counts, not only the first - students reorder them
+    ({"author": [{"family": "Zzz"}, {"family": "Smith"}]}, _SMITH, True),
     ({}, "Smith, J. (2020). Title.", False),
     ({"author": []}, "Smith, J. (2020). Title.", False),
     ({"author": [{"family": ""}]}, "Smith, J. (2020). Title.", False),
@@ -216,7 +235,7 @@ def main():
             fails.append(("corporate", line, not expected, expected))
 
     for item, entry, expected in AUTHOR_CASES:
-        if first_author_ok(item, entry) != expected:
+        if author_matches(item, entry) != expected:
             fails.append(("author-check", str(item)[:50], not expected, expected))
 
     for line, expected in ENTRY_STARTS.items():

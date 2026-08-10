@@ -38,6 +38,14 @@ import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
 
+def die(msg):
+    """Unreadable input is COULD NOT CHECK (exit 2), never 'problems found' (exit 1).
+    Exit 1 means the script read the document and found something wrong with it."""
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    print(msg, file=sys.stderr)
+    raise SystemExit(2)
+
+
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 HEADING_RE = re.compile(r"^(heading|title|subtitle)", re.I)
@@ -186,7 +194,7 @@ def _docx_paras(path):
     try:
         z = zipfile.ZipFile(path)
     except zipfile.BadZipFile:
-        sys.exit(
+        die(
             f"error: {path} is not a valid .docx (it is not a zip archive).\n"
             "  A legacy .doc renamed to .docx does this, as does a truncated download.\n"
             "  Ask the user to open it in Word and Save As .docx."
@@ -194,7 +202,7 @@ def _docx_paras(path):
     with z:
         xml = _docx_part(z, "word/document.xml")
         if xml is None:
-            sys.exit(f"error: {path} has no word/document.xml - is it a real .docx?")
+            die(f"error: {path} has no word/document.xml - is it a real .docx?")
         out = _walk_docx(xml, path, "word/document.xml")
         for part in ("word/footnotes.xml", "word/endnotes.xml"):
             raw = _docx_part(z, part)
@@ -209,7 +217,7 @@ def _walk_docx(xml, path, partname):
     try:
         root = ET.fromstring(xml)
     except ET.ParseError as e:
-        sys.exit(
+        die(
             f"error: {partname} in {path} is not well-formed XML ({e}).\n"
             "  Word does not normally emit this. The file is most likely corrupt, or "
             "was produced by a tool that failed to escape & < > in the text.\n"
@@ -299,7 +307,7 @@ def _rtf_paras(text):
 def load(path):
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pdf":
-        sys.exit(
+        die(
             "error: this script does not read PDF. Use the Read tool on the PDF "
             "instead, or ask the user for the .docx."
         )
@@ -315,7 +323,7 @@ def load(path):
             )
         return paras
     if ext == ".doc":
-        sys.exit(
+        die(
             "error: legacy .doc is not readable without Word. Ask the user to "
             "re-save as .docx or export to PDF."
         )
@@ -544,7 +552,7 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit(f"error: no such file: {args.file}")
+        die(f"error: no such file: {args.file}")
     paras = load(args.file)
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -616,7 +624,7 @@ def main():
 
     if args.budget:
         if not os.path.exists(args.budget):
-            sys.exit(f"error: no such budget file: {args.budget}")
+            die(f"error: no such budget file: {args.budget}")
         section_report(paras, parse_budget(args.budget), args.tolerance or 10.0)
     return 0
 

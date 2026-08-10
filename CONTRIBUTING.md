@@ -3,7 +3,7 @@
 ## Run the selftest first, and after
 
 ```bash
-python scripts/selftest.py     # 78 cases, exits non-zero on failure
+python scripts/selftest.py     # exits non-zero on failure
 ```
 
 The parsing regexes are the fragile part of this project. Nearly every case in

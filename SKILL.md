@@ -50,8 +50,8 @@ stop.
 
 ## Order of operations
 
-The grade gate comes first: everything after it is polish, and polishing work that
-scores 78% produces a well-polished 78%.
+The grade gate comes first because it is the only step that changes the substance. The
+steps after it are mechanical, and fixing them does not move a rubric criterion.
 
 ```
 0  Intake            document, criteria sheet, task sheet, and the edit path
@@ -70,7 +70,7 @@ Step 7 is not optional. Humanising rewrites sentences a marker will grade and ch
 the word count, so skipping it means the numbers from steps 2 and 4 no longer describe
 the file being submitted.
 
-### Script exit codes — the same contract everywhere
+### Script exit codes
 
 | Code | Meaning |
 |---|---|
@@ -78,8 +78,20 @@ the file being submitted.
 | `1` | checked, and found problems that must be fixed |
 | `2` | **could not check** — not a pass, and never reportable as one |
 
-`doctext.py` is the exception: it is an extractor, not a checker, and only fails on an
-unreadable file.
+Unreadable input (a PDF, a corrupt `.docx`, a missing file) always exits `2`, in every
+script: nothing was read, so nothing can be claimed. What each `2` means specifically:
+
+| Script | `2` means |
+|---|---|
+| `citecheck` | no reference list found, or no citations detected |
+| `linkcheck` | something needs a human (BLOCKED/TIMEOUT/SSL/NO-DNS/REDIRECTED/SOFT-404), **or** most of the reference list carried no identifier |
+| `figcheck` | no figures detected, or a `--source` path was missing |
+| `doifind` | entries left unmatched, or the whole list was grey literature |
+| `doctext` | the file could not be read (it is an extractor; it does not judge) |
+
+**`linkcheck` exiting `2` is the normal case for any document citing a paywalled
+publisher**, because BLOCKED counts as needs-a-human. That is working correctly, not
+failing — see the Step 3 gate.
 
 ---
 
@@ -103,7 +115,7 @@ Course material often lives outside the project directory — check OneDrive too
 |---|---|
 | `.docx` | `python scripts/doctext.py FILE --text` and `--outline` |
 | `.md` `.txt` `.html` `.rtf` | same |
-| `.pdf` | the **Read** tool (`pages` for long ones). **No script here reads PDF** — they all exit 1 on one, which is not a finding about the document |
+| `.pdf` | the **Read** tool (`pages` for long ones). **No script here reads PDF** — they exit `2` (could not check), which is not a finding about the document |
 | `.doc` | not readable; ask for a `.docx` |
 | a photo of a rubric | the Read tool reads images; transcribe the bands before grading |
 
@@ -342,9 +354,18 @@ you could not. That count goes in the report.
 `references/referencing.md`. Fix mechanical errors. Where a fix would change what a
 citation claims, ask rather than guess.
 
-**The gate:** step 3 passes when `citecheck.py` and `linkcheck.py` both exit `0`, every
-non-`LIVE` item has been individually opened and confirmed, the quote/statistic tally has
-no unchecked entries, and the **REFERENCE COVERAGE** line accounts for every entry.
+**The gate:** step 3 passes when
+
+- `citecheck.py` exits `0`; **and**
+- `linkcheck.py` exits `0`, **or** exits `2` and every non-`LIVE` item has been
+  individually opened and confirmed, each named in the report; **and**
+- the quote/statistic tally has no unchecked entries; **and**
+- the **REFERENCE COVERAGE** line accounts for every entry.
+
+The `or exits 2` clause is not a loophole — it is the only way the gate can ever close
+for a document citing Springer, Elsevier, JSTOR or Wiley, all of which return 403 to
+anything that is not a browser. A gate that cannot close gets ignored, which is worse
+than one with a stated escape hatch that requires naming what you opened.
 
 Coverage is the one people miss. A list of 30 print-only entries yields six live URLs and
 "6/6 resolve", which reads as a pass while 24 sources were checked by nothing at all.
@@ -515,14 +536,20 @@ GRADE      96% estimated  (round 2 of 3; lowest of 3 independent graders; spread
            lit-review 14/15 · analysis 29/30 · evidence 19/20 · structure 10/10
            An LLM panel's estimate against the rubric, not a measurement.
 
-WORDS      1,847 / 2,000  (rule: excl. references, per task sheet p.2; no tolerance)
+WORDS      1,847 / 2,000 headings in · 1,802 / 2,000 headings out
+           (rule: excl. references, per task sheet p.2; no tolerance stated)
+SECTIONS   all five within budget (see budget.txt)
 REFS       18 entries · 0 orphans · 0 uncited · 2 format fixes        citecheck exit 0
 LINKS      16/18 LIVE · 2 BLOCKED, opened by hand and confirmed (Wiley, JSTOR)
-           0 dead · 0 mismatched · 0 unconfirmed                     linkcheck exit 0
+           0 dead · 0 mismatched · 0 unconfirmed          linkcheck exit 2 (BLOCKED)
+           REFERENCE COVERAGE 18/18 entries carried an identifier
+DOIS       doifind: 0 missing · 0 year questions                       doifind exit 0
 QUOTES     7 direct quotes, 4 statistics · 11/11 checked against source
 FIGURES    3 figures · 1 table · numbered, captioned, all cross-referenced
            2 charts were pure library default → corrected code in changes.md
-PROSE      humanised · 12 tells removed · all criteria re-confirmed at baseline band
+PROSE      humanised · 12 tells removed
+           regression grader: 3/4 criteria re-confirmed at baseline band;
+           `evidence` dropped D->C, the two sentences carrying it restored
 AI POLICY  declaration required (task sheet §4) → drafted, in appendix A
 
 CHANGED    <n> edits, logged in .markpilot/<doc>/changes.md
@@ -530,6 +557,10 @@ STILL ON YOU
   · <thing only the author can decide or supply>
   · <anything left unconfirmed, by name>
 ```
+
+Every line must name what produced it — a script and its exit code, or "by hand". A line
+with no such source is a claim nobody can check. Any check that did not run gets the word
+**NOT RUN** or **NOT CHECKED**, never a blank and never omission.
 
 Report the governing (lowest) score, not the flattering one. The LINKS numerator can
 never exceed the script's `LIVE` count. Any step skipped, or run under `--report-only`,
@@ -559,6 +590,6 @@ Written under `.markpilot/<docname>/`: `rubric.md`, `constraints.md`, `text.txt`
 `grades-round-N.md`, `budget.txt`, `links.json`, `doifind.json`, `changes.md`,
 `report.md`.
 
-`scripts/selftest.py` (107 cases) guards the parsing regexes, which are the fragile part
+`scripts/selftest.py` guards the parsing regexes, which are the fragile part
 of this skill — several of those cases are defects that reached working code. Run it
 after editing any regex in `doctext.py`, `citecheck.py` or `figcheck.py`.
