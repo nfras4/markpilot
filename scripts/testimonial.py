@@ -5,6 +5,7 @@
     python testimonial.py --save --name "..." --rating 5 --comment "..."
     python testimonial.py --decline                they said no; never ask again
     python testimonial.py --show                   print what has been stored
+    python testimonial.py --share                  reprint the pre-filled share link
     python testimonial.py --reset                  clear the state (testing)
 
 Design constraints, in priority order
@@ -13,11 +14,16 @@ Design constraints, in priority order
    skill directory, so reinstalling or re-cloning the skill does not reset it and
    the file never lands in git.
 2. **Never transmit anything.** This script writes a local file and prints where
-   it is. It opens no sockets. Sending a testimonial is the user's action, taken
-   afterwards, with the text in front of them - not something a tool does on their
-   behalf. A skill that quietly uploaded a name and comment would be doing
-   something the user did not ask for, and this one is published for other people
-   to install.
+   it is. It opens no sockets.
+
+   What it does do is hand back a GitHub "new issue" link with the testimonial
+   already filled in. Pre-filled is NOT posted: the link opens a draft in the
+   person's own browser, under their own account, and nothing reaches the
+   repository until they press Submit. That keeps the decision entirely theirs
+   while removing the retyping that otherwise means almost nobody bothers.
+
+   A skill that quietly uploaded a name and comment would be doing something the
+   user did not ask for, and this one is published for other people to install.
 3. **Only after a run that worked.** Asking for a recommendation after a failed or
    blocked run is worse than not asking.
 4. **Declining is permanent and costs one keystroke.** No second prompt, no
@@ -31,12 +37,59 @@ Exit codes for --check:
 import argparse
 import json
 import os
+import re
 import sys
+import urllib.parse
 
 STATE_DIR = os.path.join(os.path.expanduser("~"), ".markpilot")
 STATE = os.path.join(STATE_DIR, "state.json")
 BOOK = os.path.join(STATE_DIR, "testimonials.md")
-SHARE_URL = "https://github.com/nfras4/markpilot/issues/new?title=Testimonial"
+REPO = "nfras4/markpilot"
+# Browsers reliably handle ~2000 characters of URL. GitHub itself accepts far
+# more, but a link that silently fails to open in someone's browser is worse than
+# a truncated one that does.
+URL_BUDGET = 1900
+
+
+def share_url(name, role, rating, comment, stamp):
+    """A GitHub 'new issue' link with the testimonial already filled in.
+
+    Pre-filled is NOT posted. The link opens a draft issue in the person's own
+    browser, under their own account, and nothing reaches the repository until
+    they press Submit. That is the whole design: one click instead of retyping,
+    with the decision still entirely theirs."""
+    who = name.strip() or "Anonymous"
+    if role.strip():
+        who += f" — {role.strip()}"
+    stars = ""
+    try:
+        n = int(rating)
+        if 1 <= n <= 5:
+            stars = "★" * n + "☆" * (5 - n)
+    except (ValueError, TypeError):
+        pass
+
+    body = f"{who}"
+    if stars:
+        body += f"\n\n{stars}"
+    if stamp:
+        body += f"\n\n_{stamp}_"
+    body += f"\n\n> {comment.strip()}\n"
+
+    def build(b):
+        return ("https://github.com/" + REPO + "/issues/new?"
+                + urllib.parse.urlencode({
+                    "title": f"Testimonial — {who}"[:80],
+                    "labels": "testimonial",
+                    "body": b,
+                }))
+
+    url = build(body)
+    if len(url) > URL_BUDGET:
+        keep = max(120, len(comment) - (len(url) - URL_BUDGET) - 40)
+        body = body.replace(comment.strip(), comment.strip()[:keep] + "…")
+        url = build(body)
+    return url
 
 
 def load():
@@ -59,6 +112,8 @@ def main():
     ap.add_argument("--save", action="store_true")
     ap.add_argument("--decline", action="store_true")
     ap.add_argument("--show", action="store_true")
+    ap.add_argument("--share", action="store_true",
+                    help="reprint the pre-filled share link for stored entries")
     ap.add_argument("--reset", action="store_true")
     ap.add_argument("--name", default="")
     ap.add_argument("--role", default="", help="e.g. 'UQ, 4th-year business'")
@@ -120,13 +175,34 @@ def main():
         with open(BOOK, "a", encoding="utf-8") as f:
             f.write("\n".join(block))
 
-        print("Saved locally. Nothing has been sent anywhere.\n")
+        url = share_url(args.name, args.role, args.rating, args.comment, args.stamp)
+        with open(BOOK, "a", encoding="utf-8") as f:
+            f.write(f"\n<!-- share: {url} -->\n")
+
+        print("Saved to your own machine. Nothing has been sent anywhere.\n")
         print(f"  {BOOK}\n")
-        print("If you'd like the author to be able to use it, you can send it yourself:")
-        print(f"  {SHARE_URL}")
-        print("\nThat is entirely optional, and the file is yours to edit or delete.")
+        print("Optional — if you're happy for the author to quote it, this link opens a")
+        print("GitHub issue with your words already filled in. It is a DRAFT: nothing is")
+        print("posted until you press Submit, and you can edit or abandon it there.\n")
+        print(f"  {url}\n")
+        print("Skipping is completely fine. The file above is yours to edit or delete,")
+        print("and you will not be asked again.")
         st.update({"asked": True, "outcome": "saved"})
         save(st)
+        return 0
+
+    if args.share:
+        if not os.path.exists(BOOK):
+            print("Nothing stored yet.")
+            return 2
+        text = open(BOOK, encoding="utf-8").read()
+        links = re.findall(r"<!-- share: (\S+) -->", text)
+        if not links:
+            print("No share link stored (entry predates this feature).")
+            return 2
+        print("Pre-filled share link(s) — a draft issue, not a post:\n")
+        for u in links:
+            print(f"  {u}\n")
         return 0
 
     ap.print_help()

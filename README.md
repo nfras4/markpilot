@@ -91,7 +91,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
 | `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
 | `export.py` + `pdfwrite.py` | Turns any report into a real `.docx` and a real `.pdf` — both written directly, no pandoc, no browser |
-| `testimonial.py` | One-time, opt-in, local-only feedback capture — sends nothing anywhere |
+| `testimonial.py` | One-time, opt-in feedback. Stores locally and hands back a pre-filled GitHub issue link — the script itself sends nothing |
 | `selftest.py` | Regression cases over the parsing regexes, plus `e2e.py` — run it, it prints the count |
 
 ```bash

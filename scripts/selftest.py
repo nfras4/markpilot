@@ -16,6 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import urllib.parse  # noqa: E402
+from testimonial import share_url, URL_BUDGET  # noqa: E402
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -288,11 +290,24 @@ def main():
 
     # End-to-end: whole script, whole document, exit code. Unit cases are blind to
     # the regression class that has now bitten three review rounds running.
+    # The share link is pre-filled, never posted - so it must survive encoding
+    # intact and must stay inside a length every browser will actually open.
+    for n in (10, 500, 4000, 20000):
+        u = share_url("A. Name", "role", "5", "x" * n, "1 Jan 2026")
+        if len(u) > URL_BUDGET:
+            fails.append(("share-url", f"comment of {n} chars", len(u), URL_BUDGET))
+    _u = share_url("Priya M.", "UQ finance", "5", "Caught a wrong DOI.", "1 Jan 2026")
+    _q = urllib.parse.parse_qs(urllib.parse.urlsplit(_u).query)
+    if "Caught a wrong DOI." not in _q.get("body", [""])[0]:
+        fails.append(("share-url", "comment survives encoding", "no", "yes"))
+    if _q.get("labels", [""])[0] != "testimonial":
+        fails.append(("share-url", "labels", _q.get("labels"), "testimonial"))
+
     fails.extend(e2e.run())
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + len(e2e.CASES))
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + len(e2e.CASES) + 6)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

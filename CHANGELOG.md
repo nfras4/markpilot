@@ -34,6 +34,21 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Feedback: pre-filled share link
+
+`testimonial.py` stored the comment locally and printed a bare "open an issue" URL, which
+meant anyone who wanted to share it had to retype the whole thing — so in practice almost
+nobody would. It now builds a GitHub *new issue* link with the title, attribution, rating
+and comment already filled in.
+
+The consent model is unchanged and deliberate: **pre-filled is not posted.** The link opens
+a draft in the person's own browser, under their own account, and nothing reaches the
+repository until they press Submit. The script still opens no network connection. That is
+the difference between removing friction and removing the decision.
+
+Truncates the comment to keep the URL inside 1,900 characters, because a link a browser
+silently refuses to open is worse than a shortened one. `--share` reprints it later.
+
 ### The fix pass and round 2, run for real
 
 The loop was completed end to end on the test fixture. Round 1 scored 71 / 70 / 67

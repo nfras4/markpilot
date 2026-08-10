@@ -799,9 +799,16 @@ python scripts/testimonial.py --decline          # if they said no
 Either branch marks the state, so it never asks again on any future run, in any project.
 
 **What it does with the answer:** writes it to `~/.markpilot/testimonials.md` on the
-user's own machine and prints the path. **It sends nothing anywhere.** The script opens no
-network connection. If the user wants the author to see it, the output gives them a link
-to do that themselves, with the text in front of them.
+user's own machine, then prints a GitHub "new issue" link **with their words already
+filled in**.
+
+**Pre-filled is not posted.** The link opens a draft issue in their own browser, under
+their own account; nothing reaches the repository until they press Submit, and they can
+edit or abandon it there. Say that when you show the link — a URL that looks like it might
+already have sent something is worse than no link at all. The script itself opens no
+network connection.
+
+`python scripts/testimonial.py --share` reprints the link later if they close the terminal.
 
 That constraint is not squeamishness. This skill is published for other people to install,
 and a tool that quietly uploaded someone's name and comments would be doing something they
