@@ -46,6 +46,37 @@ That asymmetry is the failure mode this tool exists to prevent, so:
 
 A patch that makes any of these quieter will be rejected, however much cleaner it reads.
 
+## CI
+
+There is no CI workflow in this repo. Not an oversight — pushing `.github/workflows/**`
+needs the `workflow` OAuth scope, and the repo was published without granting it.
+
+If you want CI, add it through the GitHub web UI (Actions → new workflow), which does not
+need that scope. There is nothing to install:
+
+```yaml
+name: selftest
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.8", "3.12", "3.13"]
+        exclude:
+          - {os: macos-latest, python: "3.8"}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python }}"}
+      # No install step on purpose: this project is standard library only, and a
+      # dependency creeping in should break the build.
+      - run: python scripts/selftest.py
+      - run: python -m compileall -q scripts
+```
+
 ## Style
 
 - **Standard library only.** No dependencies, no `pip install`, no API keys. It has to run
