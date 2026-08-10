@@ -97,7 +97,7 @@ def surname(token):
     # Keep unicode letters, apostrophes and hyphens; drop everything else.
     t = re.sub(r"[^\w'’\-]", "", token, flags=re.UNICODE)
     t = re.sub(r"[\d_]", "", t)
-    t = re.sub(r"['’]s$", "", t)
+    t = re.sub(r"['’]s?$", "", t)   # Hayes' / Hayes’s / Smith's
     return t.lower()
 
 
@@ -125,16 +125,26 @@ def lead_surname(phrase, drop_connectives=True):
 
 
 def split_sections(paras):
+    """Body vs reference list.
+
+    A sub-heading inside the reference section must not end it - the same
+    heading-level rule the word count uses. Appendices commonly sit BEFORE the
+    reference list, so an appendix heading returns to body, but only at a level at
+    or above the one that opened the current section."""
     body, refs = [], []
-    cur = body
+    cur, level = body, 1
     for p in paras:
         t = p.text.strip()
-        if is_section_break(t, "refs"):
+        if is_section_break(t, "refs", p.in_table):
             cur = refs
+            level = p.heading_level if p.is_heading else 1
             continue
-        if is_section_break(t, "appendix"):
+        if is_section_break(t, "appendix", p.in_table):
             cur = body
+            level = p.heading_level if p.is_heading else 1
             continue
+        if cur is refs and p.is_heading and p.heading_level <= level:
+            cur = body
         cur.append(p)
     return body, refs
 
@@ -145,7 +155,7 @@ def split_sections(paras):
 # "no year" smells, and - in linkcheck - a MISMATCH accusation against a
 # perfectly correct source whose DOI sits on its own line.
 ENTRY_START = re.compile(
-    r"^\s*(?:"
+    r"^\s*(?:van|von|de|del|della|der|den|du|da|dos|das|di|la|le|el|al|bin|ibn|ter|ten)?\s*(?:"
     r"\[\d+\]"                                                              # [1] IEEE
     r"|\d+[.)]\s+" + UPPER                                                  # 1. Vancouver
     + r"|" + UPPER + NAMECH + r"+\s*,\s*(?:" + UPPER + r"\.|" + UPPER + NAMECH + r"+)"
@@ -196,6 +206,49 @@ def ref_key(entry):
     return a, (y or "nd")
 
 
+def org_letters(entry):
+    """Lowercase letters of the organisational author name, before the year."""
+    head = re.split(r"\(\s*(?:1[6-9]|20)\d{2}", entry)[0]
+    return re.sub(r"[^a-z]", "", head.lower())
+
+
+def is_subsequence(short, long):
+    it = iter(long)
+    return all(c in it for c in short)
+
+
+def pair_abbreviations(orphans, uncited):
+    """Match short all-caps citations to spelled-out organisational entries.
+
+    "(ASIC, 2023)" in the body and "Australian Securities and Investments
+    Commission. (2023)" in the list are the SAME source, correctly formatted. Left
+    unpaired they report twice - once as an orphan citation and once as an uncited
+    reference - which is four findings for two sources and buries the real ones.
+
+    The genuine finding is narrower: APA 7 requires the abbreviation to be
+    introduced at first mention, "Australian Securities and Investments Commission
+    [ASIC] (2023)". So these are reported as a check-this, not as an error."""
+    pairs, used_o, used_u = [], set(), set()
+    for oi, (a, y, raw, n) in enumerate(orphans):
+        if not (2 <= len(a) <= 6):
+            continue
+        for ui, e in enumerate(uncited):
+            if ui in used_u:
+                continue
+            ey = ref_key(e)[1]
+            if ey != y:
+                continue
+            letters = org_letters(e)
+            if len(letters) < 8:            # a person's surname, not an organisation
+                continue
+            if is_subsequence(a, letters):
+                pairs.append((a.upper(), y, e, raw, n))
+                used_o.add(oi)
+                used_u.add(ui)
+                break
+    return pairs, used_o, used_u
+
+
 def entry_number(entry):
     m = re.match(r"^\s*(?:\[(\d+)\]|(\d+)[.)])", entry)
     if not m:
@@ -231,7 +284,10 @@ def intext_authordate(body_text):
             head = chunk[: ym.start()]
             head = re.sub(r"(?i)\b(?:see|also|e\.g\.|i\.e\.|cf\.)\b", " ", head)
             tok = lead_surname(head, drop_connectives=False)
-            if tok:
+            # An author name is capitalised. Without this, a parenthetical date range
+            # like "(early Sep - early Oct 2026)" keys "early" as a surname and
+            # reports a phantom orphan citation.
+            if tok and (tok[0].isupper() or surname(tok) in PARTICLES):
                 add(tok, ym.group(0), chunk)
 
     for m in NARRATIVE.finditer(body_text):
@@ -386,6 +442,20 @@ def main():
                 uncited.append((e, None))
 
         print(f"  Distinct in-text citations: {len(cites)}")
+
+        uncited_text = [e for e, _ in uncited]
+        pairs, used_o, used_u = pair_abbreviations(orphans, uncited_text)
+        if pairs:
+            orphans = [o for i, o in enumerate(orphans) if i not in used_o]
+            uncited = [u for i, u in enumerate(uncited) if i not in used_u]
+            print(f"\n  LIKELY ABBREVIATION  ({len(pairs)}) - cited by initials, listed "
+                  f"in full")
+            for abbr, y, entry, raw, n in pairs:
+                print(f"    ({abbr}, {y})  x{n}  ->  {entry[:66]}")
+            print("    These are probably correct. APA 7 asks that the abbreviation be")
+            print("    introduced at first mention - 'Full Name [ABBR] (year)' - so check")
+            print("    the first use of each, then leave them alone.")
+
         if orphans:
             print(f"\n  ORPHAN CITE  ({len(orphans)}) - cited in the body, absent from the list")
             for a, y, raw, n in orphans:

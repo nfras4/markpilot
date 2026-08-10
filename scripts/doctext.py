@@ -136,15 +136,36 @@ class Para:
     def is_heading(self):
         return bool(HEADING_RE.match(self.style or ""))
 
+    @property
+    def heading_level(self):
+        """0 for Title, 1..9 for HeadingN, 99 for a non-heading.
 
-def is_section_break(text, kind):
+        Needed because a section runs until the next heading AT OR ABOVE its own
+        level. Treating every heading as a section break means an "E1. Manipulation
+        check" sub-heading inside Appendix E ends the appendix, and the rest of that
+        appendix is silently counted against the word limit."""
+        if not self.is_heading:
+            return 99
+        m = re.search(r"(\d+)", self.style or "")
+        if m:
+            return int(m.group(1))
+        return 0 if re.match(r"^title", self.style or "", re.I) else 1
+
+
+def is_section_break(text, kind, in_table=False):
     """Section boundaries must be detectable WITHOUT paragraph styles.
 
     Students routinely format headings by hand - bold, larger font, no style
     applied. Requiring p.is_heading means `in_refs` never turns off again, so an
-    appendix after the reference list gets counted as part of it."""
+    appendix after the reference list gets counted as part of it.
+
+    But a match INSIDE A TABLE is never a section break. An APA conceptual-
+    definitions table has a column headed "Reference", and REFS_RE matches it
+    ("references?" is singular-optional). On a real submission that single header
+    cell hijacked the document from that point on, pulling 26 table rows into the
+    reference list and inflating the entry count from 35 to 47."""
     t = text.strip()
-    if not t or len(t) > 90:
+    if in_table or not t or len(t) > 90:
         return False
     return bool((REFS_RE if kind == "refs" else APPENDIX_RE).match(t))
 
@@ -348,6 +369,7 @@ def count_report(paras, args):
                               "in-text citations")}
     in_refs = False
     in_appendix = False
+    section_level = 1
     ref_entries = 0
     styled_headings = any(p.is_heading for p in paras)
 
@@ -358,12 +380,16 @@ def count_report(paras, args):
         if not t:
             continue
 
-        # Section boundaries are detected with or without paragraph styles.
-        if is_section_break(t, "refs"):
+        # Section boundaries are detected with or without paragraph styles. A
+        # section ends only at a heading AT OR ABOVE its own level - a sub-heading
+        # inside it is part of it.
+        if is_section_break(t, "refs", p.in_table):
             in_refs, in_appendix = True, False
-        elif is_section_break(t, "appendix"):
+            section_level = p.heading_level if p.is_heading else 1
+        elif is_section_break(t, "appendix", p.in_table):
             in_appendix, in_refs = True, False
-        elif p.is_heading:
+            section_level = p.heading_level if p.is_heading else 1
+        elif p.is_heading and p.heading_level <= section_level:
             in_refs = in_appendix = False
 
         if p.is_footnote:

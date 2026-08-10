@@ -81,7 +81,7 @@ def sections(paras):
     """Body paragraphs only - the reference list is not where figures live."""
     out = []
     for p in paras:
-        if is_section_break(p.text, "refs"):
+        if is_section_break(p.text, "refs", p.in_table):
             break
         out.append(p)
     return out

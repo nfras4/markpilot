@@ -15,7 +15,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from citecheck import intext_authordate, ref_key  # noqa: E402
+from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import is_caption_line, strip_intext, words, REFS_RE  # noqa: E402
 
 INTEXT = {
@@ -54,6 +54,27 @@ INTEXT = {
     # non-citations
     "In Table 1 (2020) is not a citation": [],
     "(n.d.) alone": [],
+    # Found on the first real submission this was run against:
+    # a possessive with a curly apostrophe keyed "hayes’" and never matched
+    "Hayes’ (2022) PROCESS macro": [("hayes", "2022")],
+    "Hayes' (2022) PROCESS macro": [("hayes", "2022")],
+    # a parenthetical date range keyed "early" as a surname
+    "fielded (early Sep – early Oct 2026) online": [],
+    "runs (mid Jan - late Feb 2025) overall": [],
+}
+
+# ref_entries must treat a lowercase nobiliary particle as the START of an entry.
+# It did not, so "van Rooij, M., ... (2011)" was merged into the preceding entry and
+# reported as an orphan citation plus a swallowed reference.
+ENTRY_STARTS = {
+    "van Rooij, M., Lusardi, A., & Alessie, R. (2011). Financial literacy.": True,
+    "de Vries, A. (2021). Title. Journal, 1(1), 1-9.": True,
+    "Smith, J. (2020). Title. Journal, 34(2), 118-142.": True,
+    "[3] T. Nguyen, \"A survey,\" ACM, 2021.": True,
+    "Australian Securities and Investments Commission. (2023). Review.": True,
+    "stochastic parrots: Can language models be too big? Proceedings, 610-623.": False,
+    "https://doi.org/10.1145/3442188.3445922": False,
+    "Journal of Retail Studies, 34(2), 118-142.": False,
 }
 
 REFS = {
@@ -156,6 +177,10 @@ def main():
         if got != expected:
             fails.append(("strip_intext", text, got, expected))
 
+    for line, expected in ENTRY_STARTS.items():
+        if bool(ENTRY_START.match(line)) != expected:
+            fails.append(("entry-start", line, not expected, expected))
+
     for text, expected in INTEXT.items():
         got = sorted(intext_authordate(text).keys())
         if got != sorted(expected):
@@ -166,7 +191,7 @@ def main():
         if got != expected:
             fails.append(("ref_key", entry, got, expected))
 
-    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP)
+    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP) + len(ENTRY_STARTS)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")
