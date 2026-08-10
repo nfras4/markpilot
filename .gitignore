@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+
+# Per-document working state written by the skill at runtime.
+.markpilot/
+
+# Never commit someone's assignment or its rubric.
+*.docx
+*.doc
+*.pdf
+*.markpilot-backup.*
+links.json
