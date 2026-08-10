@@ -1,0 +1,6 @@
+# Normalise to LF in the repo. The scripts are run on macOS and Linux too, and a
+# CRLF shebang line makes a script unexecutable there for no visible reason.
+* text=auto eol=lf
+*.png binary
+*.pdf binary
+*.docx binary
