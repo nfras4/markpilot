@@ -108,6 +108,12 @@ CASES = [
         ["testimonial.py", "--save", "--name", "X"], 2,
     ),
     (
+        "--preview must never post, and must exit 0",
+        "unused2.md", "x\n",
+        ["testimonial.py", "--preview", "--name", "A", "--rating", "5",
+         "--comment", "A comment."], 0,
+    ),
+    (
         "an unreadable document exits 2, never 1",
         "broken.docx",
         "this is not a zip archive\n",

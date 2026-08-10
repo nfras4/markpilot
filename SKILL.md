@@ -810,6 +810,37 @@ network connection.
 
 `python scripts/testimonial.py --share` reprints the link later if they close the terminal.
 
+### Offering to file it for them
+
+A browser trip is where most people drop out. So after saving, offer to post it directly —
+as a **second, separate decision**, never folded into the first:
+
+```bash
+python scripts/testimonial.py --preview --name "..." --role "..." --rating 5     --stamp "<today>" --comment "..."
+```
+
+Show them that output **verbatim**. It prints the exact title and body, and says plainly
+that it would be a public issue on a public repository under their own GitHub account. Then
+ask with AskUserQuestion: *post it* / *just give me the link* / *keep it local*.
+
+Only on an explicit yes:
+
+```bash
+python scripts/testimonial.py --file --name "..." ...     # same arguments
+```
+
+Rules that are not negotiable:
+
+- **Never run `--file` without showing `--preview` first and getting a yes.** "I'll send
+  this for you" is a different act from "here is a link", and it needs its own consent.
+- **Never re-ask** if they decline the posting. They already gave you the testimonial; the
+  local copy is the win.
+- If `gh` is missing or not logged in, `--file` refuses and prints the link instead. It
+  will not post under some other account that happens to be configured — that would put
+  their words under a stranger's name.
+- Do not offer this at all when the run itself was blocked or incomplete, same as the
+  original ask.
+
 That constraint is not squeamishness. This skill is published for other people to install,
 and a tool that quietly uploaded someone's name and comments would be doing something they
 did not agree to. Do not add a send step, do not offer to email it, and do not ask a second

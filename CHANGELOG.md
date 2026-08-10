@@ -34,6 +34,29 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Feedback: offer to file it, as a second decision
+
+The pre-filled link still required a browser trip, which is where most people drop out. So
+after saving, the skill now offers to post the issue directly — but as a **separate,
+explicitly confirmed step**, never folded into the first answer.
+
+`--preview` prints the exact title and body that would be posted, verbatim, and states
+plainly that it would be a public issue on a public repository under the person's own
+GitHub account. Only after they see that and say yes does `--file` run `gh issue create`.
+
+The guards matter more than the feature:
+
+- `--file` refuses outright if `gh` is missing or not authenticated, and prints the link
+  instead. It will not post under whatever account happens to be configured — that would
+  publish someone's words under a stranger's name. Verified by running it with `gh` off
+  the PATH: exit 2, nothing sent.
+- Declining the post does not re-ask. The local copy was already the win.
+- "I'll send this for you" is a different act from "here is a link", so it gets its own
+  consent rather than inheriting the first one.
+
+The `testimonial` label did not exist on the repository, so the pre-filled link pointed at
+a label GitHub would have dropped. Created.
+
 ### Feedback: pre-filled share link
 
 Running the Step 10 flow for real immediately found a defect no unit case would have:
