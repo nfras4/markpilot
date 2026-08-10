@@ -329,6 +329,23 @@ Work the gaps by `weight × band-gap`, highest cost first.
   between refining the author's work and writing it for them, and it is not negotiable by
   flag or by how close the score is to the target.
 - Never invent a source, statistic, quote or page number.
+- **Never introduce a claim the document's own sources do not support.** This is a
+  separate rule from the one above and it is the one that actually gets broken. Inventing a
+  *source* feels like cheating and is easy to avoid; inventing a *synthesis* — "these two
+  studies differ because they measure collaboration-heavy work" — feels like analysis, is
+  exactly what the top band asks for, and can be flatly contradicted by the draft's own
+  literature review. Every new sentence must trace to something already on the page.
+
+  This is not hypothetical. In the first end-to-end test of this loop, the fix pass added a
+  categorisation of that shape, and two of the three round-2 graders independently rejected
+  it — "inference dressed as established fact", "asserted, not shown" — because one of the
+  studies it grouped plainly did not fit. The fix *raised* the score while introducing a
+  defect a careful marker would catch.
+
+- **Read the next round's grades for damage, not just for progress.** If a fresh grader
+  flags something the previous fix pass wrote, revert that change rather than defending it.
+  The graders never saw the change log, so a finding that lands on new material is the
+  cleanest possible signal that the material was wrong.
 - Log every change to `.markpilot/<docname>/changes.md` with the criterion it targets
   **and its word delta** — `+18 / −4`, per change. The running total is what makes the
   next rule checkable instead of aspirational.

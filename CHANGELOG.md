@@ -34,6 +34,34 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### The fix pass and round 2, run for real
+
+The loop was completed end to end on the test fixture. Round 1 scored 71 / 70 / 67
+(governing 67). The fix pass ran under the authorship rules, then **three fresh graders**
+that never saw the change log scored 83 / 79 / 75 — governing **75**, up 8 points, on
++110 net authored words (under the 150 ceiling, which therefore did not fire).
+
+Three things this confirmed and one it broke:
+
+- **The fix pass moves the score, and round-2 graders are genuinely independent** — they
+  found things round 1 did not, including a defect in the fix itself.
+- **The author-input-required flag held.** The draft's core gap was "takes a defensible
+  position", which Step 2c forbids the tool from supplying. It was flagged rather than
+  written, and all three round-2 graders independently capped that criterion at exactly
+  that point — "names the adjudication task and stops". The refusal was correct and
+  visible in the marks.
+- **The target was not reached and was reported as not reached** (75 against 95), which is
+  the behaviour the round-budget rule exists to produce.
+- **New rule, because the fix pass broke one that did not exist yet.** It introduced a
+  categorisation — that the studies reporting losses "examine settings where output is
+  measured against collaboration-heavy work" — which the draft's own literature review
+  contradicts, since one of those studies measures calls answered per hour. Two of three
+  graders rejected it unprompted as "inference dressed as established fact" and "asserted,
+  not shown". The existing prohibitions cover inventing a source, statistic, quote or
+  position; none covered inventing a **synthesis**, which feels like analysis and is exactly
+  what a top band asks for. Step 2c now forbids it explicitly, and requires each round's
+  grades to be read for damage to the previous round's additions, not only for progress.
+
 ### Intake interview, real PDF, and the grading loop verified end to end
 
 - **`pdfwrite.py`** — a real `.pdf`, written directly, no browser and no dependencies.
