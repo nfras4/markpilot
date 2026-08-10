@@ -160,6 +160,28 @@ class Para:
         return 0 if re.match(r"^title", self.style or "", re.I) else 1
 
 
+def looks_like_reference(text):
+    """Does this paragraph look like a reference-list entry?
+
+    Used to find where an UNSTYLED reference section ends. Without it, `in_refs`
+    can only be cleared by a styled heading, so in a manually formatted document
+    the reference list runs to EOF and swallows everything after it - including the
+    AI declaration and acknowledgements that Step 8 tells the agent to add. The
+    word count then loses those words, in the direction that lets an over-length
+    submission read as within."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if len(t) > 120:                                  # long enough to be an entry
+        return True
+    if re.match(r"^\s*\[\d+\]|^\s*\d+[.)]\s+[A-Z]", t):
+        return True
+    if re.search(r"\((?:1[6-9]|20)\d{2}[a-z]?\)|\bdoi\b|https?://", t, re.I):
+        return True
+    # "Smith, J." / "Smith, J., & Jones, A." openings
+    return bool(re.match(r"^\s*[^\W\d_][\w'’\-]+,\s*[A-Z]\.", t, re.UNICODE))
+
+
 def is_section_break(text, kind, in_table=False):
     """Section boundaries must be detectable WITHOUT paragraph styles.
 
@@ -272,6 +294,13 @@ def _md_paras(text):
         if s.startswith(">"):
             out.append(Para(s.lstrip("> ").rstrip(), "Quote", is_quote=True))
             continue
+        # A markdown table row. Same reason as the html reader above.
+        if s.startswith("|"):
+            cells = [c.strip() for c in s.strip("|").split("|")]
+            if all(re.fullmatch(r":?-{2,}:?", c or "-") for c in cells):
+                continue                       # the ---|--- separator row
+            out.append(Para(" ".join(c for c in cells if c), in_table=True))
+            continue
         out.append(Para(s))
     return out
 
@@ -379,6 +408,7 @@ def count_report(paras, args):
     in_appendix = False
     section_level = 1
     ref_entries = 0
+    unstyled_refs_end = False
     styled_headings = any(p.is_heading for p in paras)
 
     for p in paras:
@@ -399,12 +429,26 @@ def count_report(paras, args):
             section_level = p.heading_level if p.is_heading else 1
         elif p.is_heading and p.heading_level <= section_level:
             in_refs = in_appendix = False
+        elif in_refs and not styled_headings and not looks_like_reference(t):
+            # An unstyled document has no heading to close the section with, so a
+            # short paragraph that is plainly not a reference entry ends it.
+            in_refs = False
+            unstyled_refs_end = True
 
         if p.is_footnote:
             if args.exclude_footnotes:
                 removed["footnotes"] += n
                 continue
-            counted += n
+            # Footnotes fall through to the same exclusions as body text. In
+            # AGLC/Chicago the citations LIVE in the footnotes, so short-circuiting
+            # here made --exclude-intext remove nothing from the one place the
+            # citations actually are.
+            if args.exclude_intext:
+                stripped = strip_intext(t)
+                removed["in-text citations"] += n - len(words(stripped))
+                counted += len(words(stripped))
+            else:
+                counted += n
             continue
 
         if in_refs:
@@ -437,7 +481,7 @@ def count_report(paras, args):
         else:
             counted += n
 
-    return total_all, counted, removed, ref_entries, styled_headings
+    return total_all, counted, removed, ref_entries, styled_headings, unstyled_refs_end
 
 
 def parse_budget(path):
@@ -461,28 +505,56 @@ def strip_numbering(t):
     return re.sub(r"^\s*(?:[0-9]+(?:\.[0-9]+)*\s*[.):]?\s+)", "", t.strip())
 
 
-def section_report(paras, budget, tolerance):
+def section_report(paras, budget, tolerance, args):
     """Words per top-level section, against a per-section budget.
 
     A total that lands on the limit can hide a section 30% over and another 30%
     under. Where the task sheet gives a per-section budget, that budget is the
-    rule and the total is a consequence of it."""
+    rule and the total is a consequence of it.
+
+    Counts words the SAME WAY the headline total does - the same exclusion flags,
+    the same citation stripping. Counting them differently made the sections sum to
+    MORE than the whole document's counted total, so with "citations do not count"
+    every section read over by the number of citations it held."""
     counts, order = {}, []
     current = None
+    preamble = 0
+    seen_heading = False
+    excluded = False        # inside the reference list or an appendix
     for p in paras:
         t = p.text.strip()
         if not t:
             continue
         if is_section_break(t, "refs", p.in_table) or is_section_break(t, "appendix", p.in_table):
-            current = None
+            current, excluded = None, True
             continue
         if p.is_heading and p.heading_level <= 1:
-            current = strip_numbering(t)
+            current, excluded, seen_heading = strip_numbering(t), False, True
             counts.setdefault(current, 0)
             order.append(current)
             continue
-        if current is not None:
-            counts[current] += len(words(t))
+        if excluded:
+            continue
+        if p.is_footnote and args.exclude_footnotes:
+            continue
+        if args.exclude_headings and p.is_heading:
+            continue
+        if args.exclude_tables and p.in_table:
+            continue
+        if args.exclude_quotes and p.is_quote:
+            continue
+        if args.exclude_captions and is_caption_line(t)[0]:
+            continue
+        n = len(words(strip_intext(t) if args.exclude_intext else t))
+        if current is None:
+            # Only genuine front matter counts as preamble. Without the
+            # seen_heading guard this also swept up everything after the
+            # reference list, reporting thousands of "words before the first
+            # heading" in a document whose first heading is on page one.
+            if not seen_heading:
+                preamble += n
+        else:
+            counts[current] += n
 
     print("\nSECTION BUDGET")
     rows, matched = [], set()
@@ -512,6 +584,10 @@ def section_report(paras, budget, tolerance):
         print(f"  {name[:37]:<38}{want:>8,}{got:>8,}{d:>+8,}{flag}")
     print(f"  {'TOTAL (budgeted sections only)':<38}{total_want:>8,}{total_got:>8,}"
           f"{total_got - total_want:>+8,}")
+    if preamble:
+        print(f"\n  {preamble} words sit BEFORE the first top-level heading and are in")
+        print("  no budgeted section. An abstract or executive summary placed above the")
+        print("  first heading lands here - check it is meant to.")
     unbudgeted = [h for h in order if h not in matched]
     if unbudgeted:
         print("\n  Sections with no budget line (still counted in the total above only")
@@ -546,6 +622,8 @@ def main():
     ap.add_argument("--exclude-quotes", action="store_true")
     ap.add_argument("--exclude-captions", action="store_true")
     ap.add_argument("--exclude-footnotes", action="store_true")
+    ap.add_argument("--budget-tolerance", type=float, default=10.0,
+                    help="percent leeway per section, default 10")
     ap.add_argument("--budget", default="",
                     help="file of `Section prefix = N` lines; checks each section "
                          "against a per-section word budget")
@@ -581,14 +659,17 @@ def main():
         print()
 
     if args.count:
-        total, counted, removed, refs, styled = count_report(paras, args)
+        total, counted, removed, refs, styled, unstyled_end = count_report(paras, args)
         print("WORD COUNT")
         print(f"  Everything in the file      {total:>7,}")
         for k, v in removed.items():
             if v:
                 print(f"    - {k:<24} {v:>7,}")
         print(f"  Counted against the limit   {counted:>7,}")
-        print(f"  Reference-list entries      {refs:>7,}")
+        print(f"  Reference-list paragraphs   {refs:>7,}")
+        if unstyled_end:
+            print("     (this document has no styled headings; the reference section was")
+            print("      ended at the first paragraph that does not look like an entry)")
 
         # A flag that removed nothing is reported. Silence here reads as "the
         # exclusion was applied", when what happened is that the section was
@@ -625,7 +706,9 @@ def main():
     if args.budget:
         if not os.path.exists(args.budget):
             die(f"error: no such budget file: {args.budget}")
-        section_report(paras, parse_budget(args.budget), args.tolerance or 10.0)
+        # The budget gets its own tolerance. Reusing --tolerance (which is about the
+        # overall limit) silently retuned the per-section check.
+        section_report(paras, parse_budget(args.budget), args.budget_tolerance, args)
     return 0
 
 

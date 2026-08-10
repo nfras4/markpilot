@@ -43,7 +43,7 @@ from doctext import load, norm, die  # noqa: E402
 from citecheck import (split_sections, ref_entries, ref_key,  # noqa: E402
                        author_matches)
 
-UA = "markpilot-doifind/1.0 (https://github.com/nfras4/markpilot; mailto:markpilot@local)"
+UA = "markpilot/1.0 (+https://github.com/nfras4/markpilot)"
 DOI_IN = re.compile(r"(?i)\b10\.\d{4,9}/[^\s<>\"'\]\),;]+")
 URL_IN = re.compile(r"(?i)\bhttps?://\S+")
 STOP = {"the", "and", "for", "with", "from", "that", "this", "into", "over", "under",
@@ -96,11 +96,48 @@ def years_of(item):
 
 
 def score(item, entry):
+    """Title overlap, with a floor on how few tokens may carry the decision.
+
+    The denominator is record-title tokens, so a one- or two-word title ("Trust",
+    "Consumer Research") scores 1.0 against almost any entry - and because the
+    entry side includes the journal name and publisher, a record whose TITLE
+    matches the cited work's CONTAINER also scores 1.0. Short titles are capped so
+    they cannot clear the threshold on their own."""
     title = (item.get("title") or [""])[0]
     tt, et = toks(title), toks(entry)
     if not tt:
         return 0.0, title
-    return len(tt & et) / len(tt), title
+    raw = len(tt & et) / len(tt)
+    if len(tt) < 3:
+        raw = min(raw, 0.5)
+    return raw, title
+
+
+def corroborate(item, entry):
+    """Which independent signals agree with the entry, beyond the title.
+
+    Crossref already returns volume, page, container and type in the same call.
+    Requiring TWO agreeing signals rather than one is what stops a fabricated
+    entry taking a real DOI on title overlap alone."""
+    got, e = [], entry.lower()
+    if author_matches(item, entry):
+        got.append("author")
+    pr, on, iss = years_of(item)
+    ey = re.sub(r"[^0-9]", "", ref_key(entry)[1])
+    if ey and ey in {pr, on, iss}:
+        got.append("year")
+    vol = str(item.get("volume") or "")
+    if vol and re.search(r"(?<!\d)" + re.escape(vol) + r"(?!\d)", e):
+        got.append("volume")
+    page = str(item.get("page") or "")
+    first_page = page.split("-")[0].strip() if page else ""
+    if first_page and re.search(r"(?<!\d)" + re.escape(first_page) + r"(?!\d)", e):
+        got.append("page")
+    cont = (item.get("container-title") or [""])[0]
+    ct = toks(cont)
+    if ct and len(ct & toks(entry)) / len(ct) >= 0.6:
+        got.append("container")
+    return got
 
 
 def letters(s):
@@ -125,16 +162,33 @@ CORPORATE = re.compile(
     r"Foundation|Centre|Center|Corporation|Administration|Treasury|Reserve)\b")
 
 
+JOINERS = {"and", "of", "for", "the", "on", "in", "de", "la"}
+
+
 def looks_corporate(entry):
     """An organisational author with no personal-name pattern before the year.
 
     Regulator reports, standards and statements are grey literature: Crossref
     indexes almost none of them, so a 'match' is far more likely to be a different
-    document that merely shares the organisation's name."""
+    document that merely shares the organisation's name.
+
+    The keyword list alone was too narrow - it missed acronym authors (OECD, WHO,
+    CSIRO), bodies whose name does not end in a listed noun (United Nations,
+    Standards Australia), consultancies (Deloitte), and ANY numbered entry, because
+    a leading "[12]" defeated the anchor."""
     head = re.split(r"\(\s*(?:1[6-9]|20)\d{2}", entry)[0]
+    head = re.sub(r"^\s*(?:\[\d+\]|\d+[.)])\s*", "", head).strip()   # [12] / 12.
     if re.search(r"[A-Z][a-z]+,\s*[A-Z]\.", head):     # "Smith, J." -> personal
         return False
-    return bool(CORPORATE.match(head.strip()))
+    if CORPORATE.match(head):
+        return True
+    name = re.split(r"[.,]", head)[0].strip()
+    if re.fullmatch(r"[A-Z][A-Za-z]*|[A-Z]{2,8}", name) and len(name) >= 3:
+        return True                                    # OECD. / WHO. / Deloitte.
+    # Two or more substantive capitalised words and no personal-name pattern.
+    caps = [w for w in re.findall(r"[A-Z][\w&'’\-]{2,}", name)
+            if w.lower() not in JOINERS]
+    return len(caps) >= 2
 
 
 def assess(entry, timeout, min_score):
@@ -150,13 +204,18 @@ def assess(entry, timeout, min_score):
         return {"entry": entry, "status": "NO-MATCH",
                 "detail": "Crossref returned nothing for this entry"}
 
-    best, best_s, best_t = None, 0.0, ""
+    # Rank by (corroborating signals, title overlap) - not by title alone. Checking
+    # only the top-scoring candidate discarded a correct record at rank 2 in favour
+    # of a wrong one at rank 1.
+    ranked = []
     for it in items:
-        s, t = score(it, entry)
-        if s > best_s:
-            best, best_s, best_t = it, s, t
+        sc, t = score(it, entry)
+        ranked.append((len(corroborate(it, entry)), sc, it, t))
+    ranked.sort(key=lambda r: (r[0], r[1]), reverse=True)
+    nsig, best_s, best, best_t = ranked[0]
     if best is None:
         return {"entry": entry, "status": "NO-MATCH", "detail": "no scoreable candidate"}
+    signals = corroborate(best, entry)
 
     pr, on, iss = years_of(best)
     entry_year = ref_key(entry)[1]
@@ -168,10 +227,25 @@ def assess(entry, timeout, min_score):
         "year_print": pr, "year_online": on, "year_issued": iss,
         "entry_year": ey, "volume": best.get("volume", ""), "page": best.get("page", ""),
     }
-    if best_s < min_score or not first_author_ok(best, entry):
+    rec["signals"] = signals
+    # The AUTHOR is not just another signal - it is the one that says whose work
+    # this is. Year, volume and page are the fields a fabricated entry copies from
+    # the real paper it is imitating, so they can all agree while the work belongs
+    # to someone else entirely. Where the record names authors, a match is required
+    # and one further signal must agree. Where it names none, three non-author
+    # signals are needed instead.
+    has_authors = bool(best.get("author"))
+    if has_authors:
+        ok = ("author" in signals) and len(signals) >= 2
+        need = "an author match plus one more signal"
+    else:
+        ok = len(signals) >= 3
+        need = "three signals (the record names no authors)"
+    if best_s < min_score or not ok:
         rec["status"] = "WEAK"
-        rec["detail"] = (f"title overlap {best_s:.0%}"
-                         + ("" if first_author_ok(best, entry) else ", first author not in entry"))
+        rec["detail"] = (f"title overlap {best_s:.0%}; agreeing: "
+                         + (", ".join(signals) if signals else "none")
+                         + f" - needs {need}")
         return rec
 
     candidates = {y for y in (pr, on, iss) if y}
@@ -184,7 +258,16 @@ def assess(entry, timeout, min_score):
                          f"Cite the ISSUE year unless the style says otherwise.")
     else:
         rec["status"] = "FOUND"
-        rec["detail"] = f"title overlap {best_s:.0%}"
+        rec["detail"] = (f"title overlap {best_s:.0%}; corroborated by "
+                         + ", ".join(signals))
+    # If the entry already carries a DOI, the only question worth asking is
+    # whether it agrees with the one Crossref returns.
+    have = DOI_IN.search(entry)
+    if have and rec.get("doi"):
+        if have.group(0).rstrip("/.").lower() != rec["doi"].lower():
+            rec["status"] = "DOI-CONFLICT"
+            rec["detail"] = (f"the entry cites {have.group(0)} but this record is "
+                             f"{rec['doi']} - one of them is wrong")
     return rec
 
 
@@ -210,11 +293,13 @@ def main():
         print("COULD NOT CHECK - no reference entries were parsed. Not a pass.")
         return 2
 
-    todo = [e for e in entries if args.all or not DOI_IN.search(e)]
-    skipped = len(entries) - len(todo)
-    print(f"DOI BACKFILL  -  {len(todo)} of {len(entries)} entries have no DOI")
-    if skipped:
-        print(f"  ({skipped} already carry one; --all to re-check them too)")
+    without = [e for e in entries if not DOI_IN.search(e)]
+    todo = entries if args.all else without
+    print(f"DOI BACKFILL  -  {len(without)} of {len(entries)} entries have no DOI")
+    if args.all and len(todo) > len(without):
+        print(f"  (--all: also re-checking the {len(todo) - len(without)} that do)")
+    elif len(without) < len(entries):
+        print(f"  ({len(entries) - len(without)} already carry one; --all to re-check them)")
     print()
 
     results = []
@@ -227,7 +312,7 @@ def main():
                 results.append({"entry": futs[f], "status": "QUERY-FAILED",
                                 "detail": type(e).__name__})
 
-    order = {"YEAR-DIFFERS": 0, "YEAR-SPLIT": 1, "NO-MATCH": 2, "WEAK": 3,
+    order = {"DOI-CONFLICT": -1, "YEAR-DIFFERS": 0, "YEAR-SPLIT": 1, "NO-MATCH": 2, "WEAK": 3,
              "QUERY-FAILED": 4, "GREY-LIT": 5, "FOUND": 6}
     results.sort(key=lambda r: (order.get(r["status"], 9), r["entry"][:40]))
 
@@ -246,12 +331,13 @@ def main():
     for r in results:
         by[r["status"]] = by.get(r["status"], 0) + 1
     print("  SUMMARY")
-    for k in ("FOUND", "YEAR-SPLIT", "YEAR-DIFFERS", "WEAK", "GREY-LIT", "NO-MATCH",
-              "QUERY-FAILED"):
+    for k in ("FOUND", "YEAR-SPLIT", "YEAR-DIFFERS", "DOI-CONFLICT", "WEAK",
+              "GREY-LIT", "NO-MATCH", "QUERY-FAILED"):
         if k in by:
             print(f"    {k:<13} {by[k]:>3}")
 
-    actionable = by.get("YEAR-DIFFERS", 0) + by.get("YEAR-SPLIT", 0)
+    actionable = (by.get("YEAR-DIFFERS", 0) + by.get("YEAR-SPLIT", 0)
+                  + by.get("DOI-CONFLICT", 0))
     unresolved = by.get("WEAK", 0) + by.get("NO-MATCH", 0) + by.get("QUERY-FAILED", 0)
     grey = by.get("GREY-LIT", 0)
     print(f"\n  {by.get('FOUND', 0)} DOIs can be added as-is.")

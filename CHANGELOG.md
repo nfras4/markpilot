@@ -34,6 +34,47 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 - Deduplicating DOIs by value meant the same DOI under two entries was checked against
   only one of them.
 
+### Second review round — everything the reviewers found
+
+**New:** `quotecheck.py`. The grader brief demands a quoted span for every score, but
+nothing checked the quotes were real, and an invented quote produces output identical to a
+real one. `--claims` verifies grader evidence against the document; `--list` enumerates the
+document's own quotations so "spot-check every quote" becomes a finite task.
+
+Correctness:
+
+- **`doifind` accepted a wrong DOI on corroborating fields a fabricator copies.** Year,
+  volume and page are exactly what a fake entry lifts from the paper it imitates, so all
+  three could agree while the work belonged to someone else. The author is the identity
+  signal: a match now requires the author plus one more signal, or — where the record names
+  no authors — three non-author signals.
+- **Title scoring was carried by one- and two-word titles.** The denominator is record-title
+  tokens, so "Trust" scored 1.0 against almost anything, and because the entry side includes
+  the journal name a record matching the cited work's *container* also scored 1.0. Short
+  titles are now capped below the threshold.
+- **Only the top-scoring candidate was author-checked**, discarding a correct record at rank
+  2 for a wrong one at rank 1. Candidates are now ranked by corroborating signals first.
+- **`--all` never compared the DOI already in the entry** — the one thing re-checking is
+  for. New `DOI-CONFLICT` status.
+- **Grey-lit detection missed** acronym authors (OECD, WHO, CSIRO), bodies not ending in a
+  listed noun (United Nations, Standards Australia), consultancies, and every numbered entry.
+- **An unstyled `References` heading swallowed the rest of the file**, including the AI
+  declaration Step 8 tells the agent to add — losing those words from the count.
+- **The `in_table` guard was docx-only**, so the "Reference" table-header hijack still hit
+  html, markdown and the PDF text dumps the skill routes through those readers.
+- **`--budget` ignored every exclusion flag**, so sections summed to more than the document
+  total; it also silently dropped all text before the first heading, and borrowed
+  `--tolerance` from the overall limit. Now consistent, with its own `--budget-tolerance`.
+- **APA 7's number-on-its-own-line figure caption** — the layout `references/charts.md`
+  itself prescribes — was reported as "a number with no caption text".
+- **Appendix figures after the reference list were invisible**, caption and cross-reference
+  dropped together so nothing was reported wrong.
+- Footnotes bypassed every other exclusion, so `--exclude-intext` removed nothing in
+  AGLC/Chicago where the citations live in footnotes.
+- The no-op warning printed flag names argparse rejects (`--references-section`).
+- `linkcheck` sent a **spoofed Chrome User-Agent to Crossref's API** and claimed the polite
+  pool with an unreachable mailto. Both replaced with an honest UA; 429/503 now retried.
+
 ### Fixed after an independent review round
 
 Two CRITICAL false passes, both reproduced end to end, both regressions introduced by the

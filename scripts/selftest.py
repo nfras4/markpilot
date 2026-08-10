@@ -16,7 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
-from doctext import is_caption_line, strip_intext, words, REFS_RE  # noqa: E402
+from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
+                     looks_like_reference)
 from doifind import looks_corporate  # noqa: E402
 from citecheck import author_matches  # noqa: E402
 
@@ -212,6 +213,34 @@ AUTHOR_CASES = [
 ]
 
 
+# Grey literature must be routed away from Crossref. The keyword list alone missed
+# acronym authors, bodies not ending in a listed noun, consultancies, and every
+# numbered entry (a leading "[12]" defeated the anchor).
+CORP2 = {
+    "OECD. (2024). Digital finance report.": True,
+    "WHO. (2023). Global report.": True,
+    "CSIRO. (2022). Technology outlook.": True,
+    "United Nations. (2023). Sustainable development goals report.": True,
+    "Standards Australia. (2021). AS 1234:2021.": True,
+    "Deloitte. (2024). Consumer tracker.": True,
+    '[12] Australian Securities and Investments Commission, "Review," 2023.': True,
+    "Oliver, R. L. (1999). Whence consumer loyalty? Journal of Marketing.": False,
+}
+
+# Where an UNSTYLED reference section ends. Without this the list ran to EOF and
+# swallowed the AI declaration and acknowledgements that Step 8 tells the agent to
+# add - losing those words from the count, in the unsafe direction.
+LOOKS_REF = {
+    "Smith, J. (2020). Widgets. Journal of Things, 4(2), 1-10.": True,
+    "van Rooij, M., Lusardi, A., & Alessie, R. (2011). Financial literacy.": True,
+    "[3] T. Nguyen, \"A survey,\" ACM, 2021.": True,
+    "https://doi.org/10.1145/3442188.3445922": True,
+    "Declaration of AI use": False,
+    "Acknowledgements": False,
+    "Appendix A": False,
+}
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     fails = []
@@ -230,13 +259,17 @@ def main():
         if got != expected:
             fails.append(("strip_intext", text, got, expected))
 
-    for line, expected in CORPORATE_CASES.items():
+    for line, expected in {**CORPORATE_CASES, **CORP2}.items():
         if looks_corporate(line) != expected:
             fails.append(("corporate", line, not expected, expected))
 
     for item, entry, expected in AUTHOR_CASES:
         if author_matches(item, entry) != expected:
             fails.append(("author-check", str(item)[:50], not expected, expected))
+
+    for line, expected in LOOKS_REF.items():
+        if looks_like_reference(line) != expected:
+            fails.append(("looks-like-ref", line, not expected, expected))
 
     for line, expected in ENTRY_STARTS.items():
         if bool(ENTRY_START.match(line)) != expected:
@@ -252,7 +285,7 @@ def main():
         if got != expected:
             fails.append(("ref_key", entry, got, expected))
 
-    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES) + len(AUTHOR_CASES)
+    total = len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS) + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES) + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

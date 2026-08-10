@@ -163,7 +163,7 @@ The conventions:
 - If the figure is reproduced or adapted from a source, say so: APA 7 wants a `Note.` under
   the figure with the full citation and, for a direct reproduction, a copyright statement.
 
-**APA 7 figure format:**
+**APA 7 figure format** (figcheck reads the number-on-its-own-line layout correctly):
 
 ```
 Figure 1                                    <- bold, own line

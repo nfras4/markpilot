@@ -37,6 +37,7 @@ import re
 import socket
 import ssl
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -198,21 +199,34 @@ def check_url(url, timeout):
     return TIMEOUT, f"HTTP {status}", final
 
 
-def crossref(doi, timeout):
+API_UA = "markpilot/1.0 (+https://github.com/nfras4/markpilot)"
+
+
+def crossref(doi, timeout, attempts=3):
+    """Crossref gets an honest User-Agent, not the browser UA used for publisher
+    pages. Spoofing Chrome at an API that asks you to identify yourself is the
+    opposite of what it requests.
+
+    Retries 429/503 with backoff. Without it a rate limit surfaced as BLOCKED,
+    which reads as a paywall rather than "we asked too fast"."""
     url = "https://api.crossref.org/works/" + urllib.parse.quote(doi, safe="")
     req = urllib.request.Request(url, headers={
-        "User-Agent": UA + " (mailto:markpilot@local)",
-        "Accept": "application/json",
+        "User-Agent": API_UA, "Accept": "application/json",
     })
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode("utf-8", "replace")).get("message")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return "404"
-        return None
-    except Exception:
-        return None
+    for i in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8", "replace")).get("message")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return "404"
+            if e.code in (429, 503) and i < attempts - 1:
+                time.sleep(2.0 * (i + 1))
+                continue
+            return None
+        except Exception:
+            return None
+    return None
 
 
 def toks(s):

@@ -12,7 +12,7 @@ description: |
   rubric", "is this ready to submit", "check this assignment", "will this get an HD",
   "pre-submission check", "run the rubric over this", or when handed a draft plus a
   criteria sheet.
-argument-hint: "[document] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3] [--source plots.py] [--report-only] [--quick] [--no-humanise] [--no-figures]"
+argument-hint: "[document] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill]"
 allowed-tools:
   - Read
   - Write
@@ -131,11 +131,17 @@ Steps 2c, 3, 5 and 6 all modify the document. `Write`/`Edit` cannot modify a `.d
 
 - **`.md` / `.txt` / `.html`** — edit in place. Copy to `<name>.markpilot-backup.<ext>`
   in the same folder **before the first edit**, which happens at Step 2c.
-- **`.docx` / `.pdf`** — you cannot write to it. Produce
-  `.markpilot/<docname>/changes.md` as an ordered, quotable list of edits — find-this,
-  replace-with-that, with the section for each — for the user to apply. Say this at the
-  start, not at the end. Do not silently convert their document to Markdown: that
-  discards the formatting the task sheet requires.
+- **`.docx` / `.pdf`** — you cannot write to it. From Step 2c the artefact you edit
+  and re-grade is `.markpilot/<docname>/draft-round-N.txt`: the extracted text with
+  that round's fixes applied. `changes.md` is then **derived from the diff** against
+  `text.txt`, as an ordered find-this/replace-with-that list for the user to apply.
+
+  This matters because without it the fix-and-regrade loop cannot run at all — round 2
+  would re-grade byte-identical text and any improvement it reported would be noise.
+
+  The report must carry a `SOURCE` line saying the user's file is unmodified and which
+  working text the numbers describe. Do not silently convert their document to
+  Markdown: that discards the formatting the task sheet requires.
 
 Under `--report-only`, nothing is edited at any step; every step produces findings only.
 
@@ -215,11 +221,25 @@ the brief from `references/grader-prompt.md`, close to verbatim, plus a distinct
    evidence adequate, the method correct.
 3. **Hostile second marker** — looking for the defensible reason to moderate *down*.
 
-Write each grader's output to `.markpilot/<docname>/grades-round-N.md`. Step 7 needs the
+Write each grader's output to its own file, `.markpilot/<docname>/grades-round-N-<stance>.md` (three parallel subagents cannot share one path). Step 7 needs the
 per-criterion bands, and they cannot be reconstructed later.
 
+**Verify the evidence before trusting the score.** The brief demands a quoted span for
+every criterion; nothing stopped a grader inventing one, and invented evidence produces
+output identical to real evidence.
+
+```bash
+python scripts/quotecheck.py .markpilot/<doc>/text.txt --claims .markpilot/<doc>/grades-round-N-<stance>.md
+```
+
+Exit `1` means a grader quoted something not in the document. Re-run that grading pass;
+do not act on its findings. (Check first for an extraction artefact — a quote spanning a
+table cell may be real but unreachable in the extracted text.)
+
 **The governing score is the lowest of the three, not the average.** If any competent
-marker would give it 88%, the work is at 88%.
+marker would give it 88%, the work is at 88%. The target is `--target` (default 95);
+state the target you used in the report, since a different one changes what "cleared"
+means.
 
 **If the three disagree by more than about 8 points, the disagreement is itself the
 finding.** Something is ambiguous enough that markers read it differently — usually an
@@ -228,8 +248,9 @@ Fix the ambiguity rather than the score.
 
 **Say what this number is.** It is three language models reading a rubric, not a
 measurement. Report it as an estimate, and never present it in the same register as the
-word count, which is a fact. Under `--quick` only one grader runs; the report must then
-say "1 grader, indicative only" and must not claim the work has cleared the gate.
+word count, which is a fact. Under `--quick` only one grader runs — use the **hostile second marker** stance, the
+only one defensible alone — and the report must say "1 grader, indicative only"
+and must not claim the work has cleared the gate.
 
 ### 2c. Fix
 
@@ -329,11 +350,21 @@ python scripts/doifind.py FILE --json .markpilot/<docname>/doifind.json
 ```
 
 It looks each identifier-less entry up in Crossref by its own text and reports what the
-record says. Statuses: `FOUND` (a DOI to add), `YEAR-SPLIT` (published online and issued
-in different years — the commonest citation error in student work, and it prints both
-rather than asserting a correction), `WEAK` and `NO-MATCH` (left for a human — a wrong
-DOI is worse than no DOI), and `GREY-LIT` (regulator reports, standards, statements:
-Crossref indexes almost none of them, so verify the issuing body's own URL instead).
+record says. Skip with `--no-backfill`. Every status it can emit:
+
+| Status | Meaning | Do what |
+|---|---|---|
+| `FOUND` | a DOI, corroborated by the author plus at least one of year/volume/page/container | check it against the source, then add it |
+| `YEAR-SPLIT` | published online and issued in different years | cite the **issue** year unless the style says otherwise; it prints both rather than asserting a correction |
+| `YEAR-DIFFERS` | the entry's year matches no date on the record | read it before changing anything — the match itself may be wrong |
+| `DOI-CONFLICT` | the entry already cites a DOI, and Crossref returns a different one | one of them is wrong; settle it by hand |
+| `WEAK` / `NO-MATCH` | no confident match | leave it — a wrong DOI is worse than no DOI |
+| `GREY-LIT` | regulator report, standard, statement | Crossref indexes almost none of these; verify the issuing body's own URL |
+| `QUERY-FAILED` | Crossref unreachable after retries | re-run later; this says nothing about the reference |
+
+A match needs the **author** to agree plus one more signal. Year, volume and page are
+exactly the fields a fabricated entry copies from the paper it imitates, so they can all
+agree while the work belongs to someone else.
 
 **Nothing is applied automatically, and nothing should be.** Check each proposed DOI
 against the source before it goes in the document. A confident-looking wrong DOI is the
@@ -341,7 +372,14 @@ against the source before it goes in the document. A confident-looking wrong DOI
 
 ### 3d. Check what no script can
 
-Spot-check **every direct quote and every statistic**: that the page range exists, that
+List the quotations first, so "spot-check every quote" is a finite task rather than an
+instruction:
+
+```bash
+python scripts/quotecheck.py FILE --list
+```
+
+Then check **every direct quote and every statistic**: that the page range exists, that
 the quoted sentence appears in the source, that the finding attributed to the source is
 one it reports. Use WebSearch/WebFetch for anything without a DOI — a title in quotes
 that returns nothing anywhere is very likely invented.
@@ -367,8 +405,9 @@ for a document citing Springer, Elsevier, JSTOR or Wiley, all of which return 40
 anything that is not a browser. A gate that cannot close gets ignored, which is worse
 than one with a stated escape hatch that requires naming what you opened.
 
-Coverage is the one people miss. A list of 30 print-only entries yields six live URLs and
-"6/6 resolve", which reads as a pass while 24 sources were checked by nothing at all.
+Coverage is the one people miss. On a real 29-entry list, only 6 entries carried a DOI or
+URL — so the run resolved 6/6 and read as a pass while 23 sources were checked by nothing
+at all.
 `linkcheck` now exits `2` when most of the list carries no identifier — treat that as
 *could not check*, and either add the DOIs or verify those entries by hand. Anything short of that is reported as unconfirmed, by
 name. Never reformat an entry you could not verify — a well-formatted invented source is
@@ -407,8 +446,9 @@ If the task sheet gives a word budget per section — many briefing decks do —
 A total that lands on the limit can hide one section 30% over and another 30% under, and
 the per-section budget is the rule the marker has in front of them.
 
-Write the budget to `.markpilot/<docname>/budget.txt`, one `Section prefix = N` per line,
-then:
+If the user passed `--budget FILE`, use that file. Otherwise write the budget you
+extracted in Step 1 to `.markpilot/<docname>/budget.txt`, one `Section prefix = N` per
+line. Then:
 
 ```bash
 python scripts/doctext.py FILE --count --limit 2000 --exclude-refs --exclude-appendix \
@@ -428,6 +468,11 @@ block quotes that could be paraphrased.
 rewarded. Re-run the full three-grader gate afterwards, not the single regression grader
 at Step 7. This collision is built into the order of operations — Step 2c adds, Step 4
 measures — so expect it rather than discovering it.
+
+**Termination.** Steps 4, 6 and 7 each change the word count, so they can oscillate. Cap
+the whole cut-and-regrade cycle at **two** passes. If the document is still over the limit
+after the second, stop and report it as an open item with the specific sections that would
+have to lose words — an unbounded loop chasing a limit is how a working draft gets worse.
 
 ## Step 5 — Figures and charts
 
@@ -529,38 +574,58 @@ for making one, and the report must say so. That line is not negotiable by flag.
 
 ## Step 9 — Report
 
+**Every row below is mandatory.** A row whose check did not run says **NOT RUN** or
+**NOT CHECKED** and why — never a blank, and never omission. Each row names what produced
+it: a script and its exit code, or `by hand`. A claim with no named source is one nobody
+can check, which is the thing this skill exists to prevent.
+
 ```
 MARKPILOT — <document>
-──────────────────────────────────────────────
-GRADE      96% estimated  (round 2 of 3; lowest of 3 independent graders; spread 4pts)
-           lit-review 14/15 · analysis 29/30 · evidence 19/20 · structure 10/10
-           An LLM panel's estimate against the rubric, not a measurement.
+──────────────────────────────────────────────────────────────────────
+SOURCE     graded on .markpilot/<doc>/draft-round-2.txt (4,690 words extracted)
+           your .docx is UNMODIFIED — apply changes.md to it
+TARGET     95% (--target), 3 rounds max
 
-WORDS      1,847 / 2,000 headings in · 1,802 / 2,000 headings out
-           (rule: excl. references, per task sheet p.2; no tolerance stated)
-SECTIONS   all five within budget (see budget.txt)
-REFS       18 entries · 0 orphans · 0 uncited · 2 format fixes        citecheck exit 0
-LINKS      16/18 LIVE · 2 BLOCKED, opened by hand and confirmed (Wiley, JSTOR)
-           0 dead · 0 mismatched · 0 unconfirmed          linkcheck exit 2 (BLOCKED)
+GRADE      96% estimated  (round 2 of 3; LOWEST of 3 graders; spread 4 pts)   by agents
+           lit-review 14/15 · analysis 29/30 · evidence 19/20 · structure 10/10
+           An LLM panel's estimate against the rubric. Not a measurement.
+EVIDENCE   18/18 grader-quoted spans found in the document          quotecheck exit 0
+
+WORDS      1,847 / 2,000 headings in · 1,802 / 2,000 headings out    doctext exit 0
+           (rule: excl. references + appendices, task sheet p.2; no tolerance stated)
+SECTIONS   5/5 within their per-section budget                       doctext --budget
+REFS       18 entries · 0 orphans · 0 uncited · 2 format fixes      citecheck exit 0
+LINKS      16/18 LIVE · 0 dead · 0 mismatched          linkcheck exit 2 (2 BLOCKED)
+           2 BLOCKED (Wiley, JSTOR) opened in a browser and confirmed   by hand
            REFERENCE COVERAGE 18/18 entries carried an identifier
-DOIS       doifind: 0 missing · 0 year questions                       doifind exit 0
-QUOTES     7 direct quotes, 4 statistics · 11/11 checked against source
-FIGURES    3 figures · 1 table · numbered, captioned, all cross-referenced
+DOIS       0 missing · 0 year questions · 0 conflicts                doifind exit 0
+QUOTES     7 quotes + 4 statistics · 11/11 checked against source       by hand
+FIGURES    3 figures · 1 table · numbered, captioned, cross-referenced  figcheck exit 1
            2 charts were pure library default → corrected code in changes.md
 PROSE      humanised · 12 tells removed
            regression grader: 3/4 criteria re-confirmed at baseline band;
-           `evidence` dropped D->C, the two sentences carrying it restored
-AI POLICY  declaration required (task sheet §4) → drafted, in appendix A
+           `evidence` dropped D→C, the two sentences carrying it restored
+AI POLICY  declaration required (task sheet §4) → drafted, on the coversheet
 
 CHANGED    <n> edits, logged in .markpilot/<doc>/changes.md
+NOT CHECKED
+  · <every check that did not run, and why>
 STILL ON YOU
   · <thing only the author can decide or supply>
   · <anything left unconfirmed, by name>
 ```
 
-Every line must name what produced it — a script and its exit code, or "by hand". A line
-with no such source is a claim nobody can check. Any check that did not run gets the word
-**NOT RUN** or **NOT CHECKED**, never a blank and never omission.
+Variants that must be used when they apply:
+
+- **No rubric** → `GRADE  NOT RUN — no rubric published; requirements compliance only`,
+  and **no percentage anywhere** in the report.
+- **`--quick`** → `GRADE  84% indicative only (1 grader) — the gate was NOT cleared`.
+- **PDF input** → add to `SOURCE`: `checks ran on a text extraction; page fidelity lost`.
+- **No plotting source** → `FIGURES … chart styling NOT CHECKED — no plotting source`.
+- **`--report-only`** → `CHANGED  nothing (--report-only)`.
+- **Similarity** → markpilot does **not** check text-matching or plagiarism, and Turnitin
+  is not run here. Say so under NOT CHECKED rather than letting a reader assume it was
+  covered.
 
 Report the governing (lowest) score, not the flattering one. The LINKS numerator can
 never exceed the script's `LIVE` count. Any step skipped, or run under `--report-only`,
@@ -577,18 +642,18 @@ or that exited `2`, appears in the report as such — never as a pass.
 | `--rounds N` | max fix-and-regrade cycles, default 3 |
 | `--source FILE…` | plotting source to scan in step 5 |
 | `--report-only` | change nothing at any step; findings only |
-| `--quick` | one grader instead of three. Report must say "indicative only" and must not claim the gate was cleared |
-| `--no-humanise` | skip step 6 and its re-grade |
+| `--quick` | one grader (hostile second marker stance). Report says "indicative only"; the gate is not cleared |
+| `--no-humanise` | skip step 6 and step 7's regression grade. The word count in step 7 still re-runs if step 4 changed anything |
 | `--no-figures` | skip step 5 |
-| `--link-timeout N` | seconds per fetch, default 20 — raise on a slow connection |
-| `--budget FILE` | per-section word budget for step 4 (`Section prefix = N` per line) |
+| `--link-timeout N` | seconds per fetch, passed to `linkcheck --timeout` (default 20) |
+| `--budget FILE` | per-section word budget for step 4. Takes precedence over the budget written from step 1 |
 | `--no-backfill` | skip the DOI lookup in step 3c |
 
 ## Files
 
 Written under `.markpilot/<docname>/`: `rubric.md`, `constraints.md`, `text.txt`,
-`grades-round-N.md`, `budget.txt`, `links.json`, `doifind.json`, `changes.md`,
-`report.md`.
+`grades-round-N-<stance>.md`, `draft-round-N.txt`, `budget.txt`, `links.json`,
+`doifind.json`, `changes.md`, `report.md`.
 
 `scripts/selftest.py` guards the parsing regexes, which are the fragile part
 of this skill — several of those cases are defects that reached working code. Run it

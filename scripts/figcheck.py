@@ -78,12 +78,22 @@ SOURCE_TELLS = [
 
 
 def sections(paras):
-    """Body paragraphs only - the reference list is not where figures live."""
-    out = []
+    """Everything except the reference list.
+
+    Breaking at the first refs boundary lost every appendix figure, because
+    appendices usually follow the reference list - and losing a caption AND its
+    cross-reference together means nothing is reported wrong, so the omission is
+    invisible."""
+    out, in_refs = [], False
     for p in paras:
         if is_section_break(p.text, "refs", p.in_table):
-            break
-        out.append(p)
+            in_refs = True
+            continue
+        if is_section_break(p.text, "appendix", p.in_table):
+            in_refs = False
+            continue
+        if not in_refs:
+            out.append(p)
     return out
 
 
@@ -112,6 +122,7 @@ def series_of(num):
 def check_document(path):
     paras = sections(load(path))
     captions, cap_seen = {}, []
+    carried = set()      # title lines consumed by a number-only caption
     cap_idx = {}       # paragraph index -> the key it captions
     for i, p in enumerate(paras):
         t = norm(p.text).strip()
@@ -120,6 +131,19 @@ def check_document(path):
         ok, kind, num, rest = is_caption_line(t)
         if ok:
             key = normnum(kind, num)
+            # APA 7 puts the number on its own line and the title on the next
+            # ("Figure 1" / "Engagement Rate by Cohort"). references/charts.md
+            # prescribes exactly that layout, so reporting it as "a number with no
+            # caption text" is a fabricated defect on a correctly formatted figure.
+            if not rest:
+                for q in paras[i + 1:i + 3]:
+                    nxt = norm(q.text).strip()
+                    if not nxt:
+                        continue
+                    if not is_caption_line(nxt)[0] and len(nxt) < 300:
+                        rest = nxt
+                        carried.add(id(q))
+                    break
             captions.setdefault(key, rest)
             cap_seen.append(key)
             cap_idx[i] = key

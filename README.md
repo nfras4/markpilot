@@ -67,6 +67,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `linkcheck.py` | Resolves every URL and DOI; compares Crossref metadata against the reference entry |
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
+| `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
 | `selftest.py` | Regression cases over the parsing regexes — run it, it prints the count |
 
 ```bash
@@ -75,6 +76,7 @@ python scripts/citecheck.py report.docx --style apa7
 python scripts/linkcheck.py report.docx --json links.json
 python scripts/figcheck.py  report.docx --source analysis.py
 python scripts/doifind.py   report.docx
+python scripts/quotecheck.py report.docx --list
 ```
 
 Exit codes: `0` clean, `1` problems found, `2` **could not check** — which is never a
