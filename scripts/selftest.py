@@ -296,6 +296,13 @@ def main():
         u = share_url("A. Name", "role", "5", "x" * n, "1 Jan 2026")
         if len(u) > URL_BUDGET:
             fails.append(("share-url", f"comment of {n} chars", len(u), URL_BUDGET))
+    # A rating with no comment must NOT emit a blockquote. Found by running the
+    # Step 10 flow for real: "rating only" could not be stored without inventing a
+    # comment, which then sat in the file formatted as something the user said.
+    _r = share_url("A. Name", "role", "5", "", "1 Jan 2026")
+    if "%3E" in _r:                       # an encoded ">" means a quote was emitted
+        fails.append(("share-url", "rating-only must not emit a blockquote",
+                      "quoted", "not quoted"))
     _u = share_url("Priya M.", "UQ finance", "5", "Caught a wrong DOI.", "1 Jan 2026")
     _q = urllib.parse.parse_qs(urllib.parse.urlsplit(_u).query)
     if "Caught a wrong DOI." not in _q.get("body", [""])[0]:
@@ -307,7 +314,7 @@ def main():
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + len(e2e.CASES) + 6)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + len(e2e.CASES) + 7)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

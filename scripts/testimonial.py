@@ -74,7 +74,13 @@ def share_url(name, role, rating, comment, stamp):
         body += f"\n\n{stars}"
     if stamp:
         body += f"\n\n_{stamp}_"
-    body += f"\n\n> {comment.strip()}\n"
+    # A rating with no comment is a rating with no comment. Emitting a blockquote
+    # containing a placeholder puts words in someone's mouth, in the one file whose
+    # entire purpose is quoting people accurately.
+    if comment.strip():
+        body += f"\n\n> {comment.strip()}\n"
+    else:
+        body += "\n\n_Rating only; no comment left._\n"
 
     def build(b):
         return ("https://github.com/" + REPO + "/issues/new?"
@@ -153,8 +159,9 @@ def main():
         return 0
 
     if args.save:
-        if not args.comment.strip():
-            print("error: --comment is required to save", file=sys.stderr)
+        if not args.comment.strip() and not args.rating.strip():
+            print("error: --save needs a --rating or a --comment (or both)",
+                  file=sys.stderr)
             return 2
         os.makedirs(STATE_DIR, exist_ok=True)
         stars = ""
@@ -171,7 +178,10 @@ def main():
         if args.role.strip():
             who += f" — {args.role.strip()}"
         block.append(f"**{who}**" + (f"  {stars}" if stars else ""))
-        block += ["", "> " + args.comment.strip().replace("\n", "\n> "), ""]
+        if args.comment.strip():
+            block += ["", "> " + args.comment.strip().replace("\n", "\n> "), ""]
+        else:
+            block += ["", "_Rating only; no comment left._", ""]
         with open(BOOK, "a", encoding="utf-8") as f:
             f.write("\n".join(block))
 

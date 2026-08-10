@@ -36,6 +36,17 @@ Regression cases for all of these are in `scripts/selftest.py` (90 cases).
 
 ### Feedback: pre-filled share link
 
+Running the Step 10 flow for real immediately found a defect no unit case would have:
+**"rating only, no comment" could not be recorded honestly.** `--save` required a comment,
+so a rating-only answer had to be stored as `(rating only — no comment left)` — placed in
+the file as a markdown blockquote, formatted exactly like something the person had said.
+A fabricated quote, in the one file whose entire purpose is quoting people accurately.
+
+`--save` now accepts a rating, a comment, or both, and renders a rating-only entry as
+italic text rather than a quotation. It refuses only when there is nothing at all to save,
+and a refusal does not consume the ask-once flag.
+
+
 `testimonial.py` stored the comment locally and printed a bare "open an issue" URL, which
 meant anyone who wanted to share it had to retype the whole thing — so in practice almost
 nobody would. It now builds a GitHub *new issue* link with the title, attribution, rating

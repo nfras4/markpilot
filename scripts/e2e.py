@@ -103,6 +103,11 @@ CASES = [
         ["figcheck.py", "{f}", "--source", "does_not_exist_anywhere.py"], 2,
     ),
     (
+        "testimonial --save refuses when there is nothing to save",
+        "unused.md", "x\n",
+        ["testimonial.py", "--save", "--name", "X"], 2,
+    ),
+    (
         "an unreadable document exits 2, never 1",
         "broken.docx",
         "this is not a zip archive\n",
