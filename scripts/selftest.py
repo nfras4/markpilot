@@ -20,6 +20,8 @@ import e2e  # noqa: E402
 import urllib.parse  # noqa: E402
 from testimonial import (  # noqa: E402
     share_url, form_url, public_record, record, URL_BUDGET)
+from docxpatch import (  # noqa: E402
+    minimal_edit, apply_to_paragraph, visible_text, para_runs)
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -344,11 +346,56 @@ def main():
         fails.append(("consent", "long comment trims rather than vanishes",
                       len(_long), f"<={URL_BUDGET} and non-empty"))
 
+    # docxpatch. Both cases below are defects that reached working code and were
+    # found by running the patcher against a real assignment, not by reading it.
+    #
+    # Word splits a reference across runs at every formatting change, so the journal
+    # name and volume are italic and the issue, pages and DOI are not. The first
+    # version replaced the whole matched span, which dumped all of it into the italic
+    # run and silently italicised the page range and the DOI - an APA error created
+    # by the tool that exists to fix APA errors.
+    _SPLIT = ('<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">'
+              'Journal of Service Research, 14</w:t></w:r>'
+              '<w:r><w:t xml:space="preserve">(3), 252-271.</w:t></w:r>')
+    _doi = " https://doi.org/10.1177/1094670511411703"
+    _body, _hit = apply_to_paragraph(_SPLIT, "14(3), 252-271.", "14(3), 252-271." + _doi)
+    _runs = [p["text"] for p in para_runs(_body)]
+    if not _hit:
+        fails.append(("docxpatch", "append across a run boundary", "no match", "applied"))
+    elif _runs[0] != "Journal of Service Research, 14":
+        fails.append(("docxpatch", "italic run must not absorb the append",
+                      _runs[0], "Journal of Service Research, 14"))
+    elif not _runs[1].endswith(_doi):
+        fails.append(("docxpatch", "DOI lands in the roman run", _runs[1], "...+ doi"))
+
+    # A pure insertion has zero width. The covered-run loop matched nothing at a run
+    # boundary and reported failure while claiming success, which is the exact shape
+    # of bug this whole skill is built to refuse.
+    _b2, _h2 = apply_to_paragraph(_SPLIT, "(3), 252-271.", "(3), 252-271." + _doi)
+    if not _h2 or _doi not in visible_text(_b2):
+        fails.append(("docxpatch", "zero-width insertion at a run boundary",
+                      _h2, "applied"))
+
+    # Trimming to the minimal edit is what preserves the boundary; check it directly.
+    for _o, _n, _want in (("abc", "abXc", (2, "", "X")),
+                          ("2021", "2022", (3, "1", "2")),
+                          ("same", "same", (4, "", ""))):
+        _got = minimal_edit(_o, _n)
+        if _got != _want:
+            fails.append(("docxpatch", f"minimal_edit({_o!r},{_n!r})", _got, _want))
+
+    # A substitution genuinely inside one run must still work, and must not disturb
+    # its neighbour.
+    _b3, _h3 = apply_to_paragraph(_SPLIT, "Service Research", "Service Marketing")
+    if not _h3 or "Journal of Service Marketing, 14" not in visible_text(_b3) \
+            or "(3), 252-271." not in visible_text(_b3):
+        fails.append(("docxpatch", "substitution within one run", _h3, "applied cleanly"))
+
     fails.extend(e2e.run())
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 14)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 21)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

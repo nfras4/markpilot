@@ -404,3 +404,35 @@ Two gaps found by running the pipeline against a real assignment twice.
   user cannot find is a report that does not exist. A mandatory `WRITTEN` row now lists
   every file produced, by absolute path.
 
+### docxpatch: the loop can reach the document it is grading
+
+The fix-and-regrade loop edits extracted text, because `.docx` is a zip and Write/Edit
+cannot touch it. The consequence went unstated for too long: round 3 reports a score for
+`draft-round-3.txt` while the user still holds the original, so the number describes a
+document that does not exist yet. `docxpatch.py` closes that gap by writing the
+accumulated edits back into the real file.
+
+Two defects in it were found by running it against a real assignment, not by reading it:
+
+- **Word splits a paragraph at every formatting change, and the split lands mid-sentence.**
+  In a real reference list, `Journal of Service Research, 14` (italic volume) and
+  `(3), 252-271.` are separate runs, so the string `14(3), 252-271.` does not occur
+  anywhere in `document.xml`. A naive `replace()` does nothing and reports success. The
+  patcher works on the paragraph's concatenated text and maps each character back to the
+  run it came from.
+- **Replacing the whole matched span italicised the page range and the DOI.** The
+  replacement inherits the first touched run's formatting, and the match began in the
+  italic run. That is an APA error introduced by the tool that exists to fix APA errors,
+  in a document where Referencing is separately marked. Edits are now trimmed to the
+  minimal differing span first, so appending a DOI becomes a pure insertion that lands in
+  the roman run and never touches the italic one.
+- Trimming to the minimal edit then exposed a third: **a zero-width insertion at a run
+  boundary matched no run at all** and silently reported failure. Insertions now select
+  their run explicitly, preferring the run that ends at the insertion point.
+
+It refuses to be a general Word editor: text substitution inside existing paragraphs and
+nothing else. No inserting paragraphs, no restyling, no moving content. Every capability
+added there is another way to corrupt a submission the day before it is due. It verifies
+the rewritten archive reopens and every edit survived before replacing the original, and
+writes a `.markpilot-backup.docx` first.
+

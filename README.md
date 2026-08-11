@@ -108,6 +108,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
 | `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
+| `docxpatch.py` | Writes accumulated text fixes back into the original `.docx`, run-aware, so the score describes the file you actually submit |
 | `export.py` + `pdfwrite.py` | Turns any report into a real `.docx` and a real `.pdf` — both written directly, no pandoc, no browser |
 | `testimonial.py` | One-time, opt-in feedback. Stores locally; asks *may I quote this* and *may I use your name* as separate questions, and hands back a pre-filled link that needs no account |
 | `selftest.py` | Regression cases over the parsing regexes, plus `e2e.py` — run it, it prints the count |
