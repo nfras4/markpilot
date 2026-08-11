@@ -108,6 +108,7 @@ All of them take a `.docx`, `.md`, `.txt`, `.html` or `.rtf`. None reads PDF —
 | `figcheck.py` | Figure/table numbering and cross-references; default-chart-styling tells |
 | `doifind.py` | Looks up missing DOIs in Crossref and flags online-vs-issue year splits |
 | `quotecheck.py` | Verifies quoted evidence exists in the document; lists the document's own quotations |
+| `discover.py` | Points at a folder and works out which file is the draft, the rubric and the task sheet, from content rather than filenames |
 | `docxpatch.py` | Writes accumulated text fixes back into the original `.docx`, run-aware, so the score describes the file you actually submit |
 | `tablecheck.py` | Table numbering, caption position, cross-references, ragged rows — structure that does not survive text extraction |
 | `stylecheck.py` | Fonts, sizes, spacing, margins, whether Word heading styles were used at all, and required sections |

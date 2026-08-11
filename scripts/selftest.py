@@ -24,6 +24,7 @@ from docxpatch import (  # noqa: E402
     minimal_edit, apply_to_paragraph, visible_text, para_runs)
 from tablecheck import analyse as tc_analyse  # noqa: E402
 from stylecheck import analyse as sc_analyse  # noqa: E402
+from discover import score as disc_score, offering as disc_offering  # noqa: E402
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -473,11 +474,36 @@ def main():
     if not any("Executive Summary" in x for x in _pr3):
         fails.append(("stylecheck", "missing required section named", _pr3, "named"))
 
+    # discover. Both cases are misclassifications observed on the first real folder.
+    #
+    # Underscores are word characters, so \bproposal\b never matched inside
+    # "RBUS3900_A1_Research_Proposal_DRAFT.docx" and the real draft scored no higher
+    # than the research notes beside it.
+    _txt = "Body text. " * 400 + "\nReferences\nSmith, J. (2020). Title. Journal."
+    _r, _t, _d = disc_score("RBUS3900_A1_Research_Proposal_DRAFT.docx", _txt)
+    _r2, _t2, _d2 = disc_score("A1-case5-scout.md", _txt)
+    if _d <= _d2:
+        fails.append(("discover", "underscored filename must score as a draft",
+                      f"draft={_d} vs note={_d2}", "draft higher"))
+
+    # A rubric must not be picked as the draft, however long it is.
+    _rub = ("Criteria Exceptional Advanced Proficient Functional Unsatisfactory "
+            "15% 25% 30% 15% 5% " + "band descriptor text " * 200)
+    _r3, _t3, _d3 = disc_score("Assessment 1 Rubric.docx", _rub)
+    if _r3 < 6 or _d3 >= _d:
+        fails.append(("discover", "rubric must outscore as rubric, not as draft",
+                      f"rubric={_r3} draft={_d3}", "rubric high, draft low"))
+
+    # The offering is read from the text, because the filename lied on the real one.
+    if disc_offering("RBUS3900 Semester 2, 2026\nAssessment 1") != "Semester 2, 2026":
+        fails.append(("discover", "offering parsed from content",
+                      disc_offering("RBUS3900 Semester 2, 2026"), "Semester 2, 2026"))
+
     fails.extend(e2e.run())
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 30)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 33)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")
