@@ -22,6 +22,8 @@ from testimonial import (  # noqa: E402
     share_url, form_url, public_record, record, URL_BUDGET)
 from docxpatch import (  # noqa: E402
     minimal_edit, apply_to_paragraph, visible_text, para_runs)
+from tablecheck import analyse as tc_analyse  # noqa: E402
+from stylecheck import analyse as sc_analyse  # noqa: E402
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -391,11 +393,91 @@ def main():
             or "(3), 252-271." not in visible_text(_b3):
         fails.append(("docxpatch", "substitution within one run", _h3, "applied cleanly"))
 
+    # tablecheck. analyse() takes the flat document sequence, so the logic can be
+    # exercised without building a .docx fixture for every case.
+    def _seq(*items):
+        out = []
+        for it in items:
+            out.append({"kind": "table", "rows": it[1]} if it[0] == "t"
+                       else {"kind": "para", "text": it[1]})
+        return out
+
+    _ROWS = [["a", "b"], ["c", "d"]]
+    _cases = [
+        ("caption above is clean",
+         _seq(("p", "Table 1. Results"), ("t", _ROWS), ("p", "See Table 1 for detail.")),
+         0),
+        ("caption below is a problem in APA",
+         _seq(("t", _ROWS), ("p", "Table 1. Results"), ("p", "See Table 1 for detail.")),
+         1),
+        ("a table nobody refers to is flagged",
+         _seq(("p", "Table 1. Results"), ("t", _ROWS), ("p", "Unrelated prose.")),
+         1),
+        ("ragged rows are flagged",
+         _seq(("p", "Table 1. Results"), ("t", [["a", "b"], ["c"]]),
+              ("p", "See Table 1.")), 1),
+    ]
+    for _label, _s, _want in _cases:
+        _t, _p = tc_analyse(_s)
+        if (len(_p) > 0) != bool(_want):
+            fails.append(("tablecheck", _label, _p, "clean" if not _want else "a problem"))
+
+    # Ten uncaptioned tables is ONE finding about the document, not ten about tables.
+    # Reported per-table it buries the diagnosis under its own repetition.
+    _many = []
+    for i in range(4):
+        _many += [{"kind": "para", "text": f"Appendix {i}"},
+                  {"kind": "table", "rows": _ROWS}]
+    _t, _p = tc_analyse(_many)
+    if len(_p) != 1 or "NONE of the 4" not in _p[0]:
+        fails.append(("tablecheck", "all-uncaptioned collapses to one finding",
+                      len(_p), 1))
+    # ...but a single missing caption among captioned tables must still be named.
+    _mixed = _seq(("p", "Table 1. Good"), ("t", _ROWS), ("p", "See Table 1."),
+                  ("p", "Some heading"), ("t", _ROWS))
+    _t, _p = tc_analyse(_mixed)
+    if not any("has no numbered caption" in x for x in _p):
+        fails.append(("tablecheck", "one uncaptioned among captioned", _p, "named"))
+
+    # stylecheck. A bold cell inside a table is not a hand-formatted heading; reading
+    # it as one reported "Pass" and ".004" as headings on the first real document.
+    def _p(text, bold=False, style="", in_table=False):
+        return {"text": text, "style": style, "bold": bold,
+                "words": len(text.split()), "in_table": in_table}
+
+    _body = {"fonts": __import__("collections").Counter({"Calibri": 10}),
+             "sizes": __import__("collections").Counter({11.0: 10}),
+             "table_sizes": __import__("collections").Counter(),
+             "spacings": __import__("collections").Counter({1.15: 5}),
+             "margins": {}, "paras": [
+                 _p("Results", bold=True, in_table=True),
+                 _p("Some ordinary body prose that runs on for more than twelve words "
+                    "so it reads as a paragraph."),
+             ]}
+    _pr, _ = sc_analyse(_body)
+    if any("hand-formatted" in x or "heading styles" in x for x in _pr):
+        fails.append(("stylecheck", "bold table cell is not a heading", _pr, "no finding"))
+
+    # ...but a bold, unstyled, short paragraph followed by prose is one.
+    _body2 = dict(_body, paras=[
+        _p("Literature Review", bold=True),
+        _p("Some ordinary body prose that runs on for more than twelve words so it "
+           "reads as a paragraph."),
+    ])
+    _pr2, _ = sc_analyse(_body2)
+    if not any("heading" in x for x in _pr2):
+        fails.append(("stylecheck", "unstyled bold heading is flagged", _pr2, "flagged"))
+
+    # A required section that is absent must be named.
+    _pr3, _ = sc_analyse(_body, require=["Executive Summary"])
+    if not any("Executive Summary" in x for x in _pr3):
+        fails.append(("stylecheck", "missing required section named", _pr3, "named"))
+
     fails.extend(e2e.run())
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 21)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 30)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")

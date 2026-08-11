@@ -120,6 +120,16 @@ CASES = [
          "--comment", "A comment."], 2,
     ),
     (
+        "tablecheck on a non-docx is could-not-check, not a clean bill",
+        "nodocx.md", "Some prose with no tables.\n",
+        ["tablecheck.py", "{f}"], 2,
+    ),
+    (
+        "stylecheck on a non-docx is could-not-check, not a clean bill",
+        "nodocx2.md", "Some prose.\n",
+        ["stylecheck.py", "{f}"], 2,
+    ),
+    (
         "an unreadable document exits 2, never 1",
         "broken.docx",
         "this is not a zip archive\n",
