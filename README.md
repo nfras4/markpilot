@@ -7,22 +7,28 @@ short, re-grades with fresh agents, and only then runs the finishing passes: ref
 cross-matching, resolving every link and DOI, word count against the stated rule, figure
 numbering, prose humanising, and the task sheet's AI-use policy.
 
-> ### It refines a draft. It does not write one.
+> ### It refines a draft. It never invents evidence.
 >
 > Markpilot requires an existing document and stops if there is none. There is no
 > "generate the assignment" path in this pipeline, by design. It closes the gap between a
 > draft and the rubric it will be marked against — finding where a criterion is not met,
 > saying so specifically, and tightening what is already there.
 >
-> Where closing a gap would need **a position the author has not taken, evidence they have
-> not gathered, or a source they have not read**, it flags that as author-input-required
-> and moves on. It does not supply the argument.
+> Two rules, and only the first one bends. Where closing a gap needs **evidence the author
+> has not gathered or a source they have not read**, it flags that as author-input-required
+> and moves on — it will not invent a source, a statistic, a quotation or a page number,
+> ever, and no setting changes that. Where the gap can be closed from material already on
+> the page, it may write the argument, and then it has to account for it.
 >
-> That line is enforced, not just asserted: every change records its word delta, the
-> report carries a mandatory `AUTHORED` row showing net words written, and at **+150 net
-> words** the pipeline stops and asks the author before going further. A criterion flagged
-> author-input-required cannot be quietly closed by a later round writing the missing
-> position.
+> That accounting is enforced, not asserted. Every change records its word delta. Every
+> agent-written passage is logged **verbatim** in `authored.md` with the criterion it
+> closed, marked in the document itself, and carried into the Step 8 AI-use declaration —
+> which is built from that file rather than from recollection. The report carries a
+> mandatory `AUTHORED` row naming both what was written and what was left unwritten because
+> only the author could supply it.
+>
+> The point is not that a tool refuses to help. It is that you can always see exactly which
+> sentences are yours, and declare the rest accurately.
 >
 > It also runs *toward* your institution's AI policy rather than around it: Step 8 reads
 > the policy and helps you comply with it, and humanising the prose is never treated as a
@@ -81,17 +87,24 @@ the pass it describes.
 ## Pipeline
 
 ```
-0  Intake            document, criteria sheet, task sheet, and the edit path
+0  Intake            discover.py finds the draft, the rubric and the task sheet
 1  Constraints       extract every hard rule the task sheet states
-2  GRADE GATE        independent graders -> fix -> fresh graders -> loop
-3  References        cross-match, RESOLVE every link and DOI, check quotes, format
+2  GRADE GATE        independent graders -> fix -> fresh graders -> loop to target
+3  References        cross-match, verify every source, check quotes, format
 4  Word count        against the stated rule and its stated exclusions
-5  Figures           numbering, cross-refs, charts that look pasted from a notebook
+5  Presentation      figures, tables, styling, and whether the template was used
 6  Humanise          prose cleanup under an academic clamp
 7  Re-verify         humanising changed the prose AND the count - check both again
-8  AI declaration    comply with the task sheet's policy
+8  AI declaration    comply with the policy, listing what the agent wrote
+8b Write back        docxpatch puts the accumulated fixes into the real document
 9  Report            what passed, what changed, what is still on the author
 ```
+
+**On a `.docx`, steps 2c to 7 edit extracted text, not your file.** Word documents are
+zips; nothing here can edit one in place. Step 8b is what closes that gap, writing the
+accumulated fixes back into the real document and re-running the counts against it. Without
+that step the score describes a text file you do not submit, which is the single most
+misleading thing this tool could do.
 
 The grade gate runs first because it is the only step that changes the substance. The
 steps after it are mechanical, and fixing them does not move a rubric criterion.

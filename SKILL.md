@@ -12,9 +12,9 @@ description: |
   rubric", "is this ready to submit", "check this assignment", "will this get an HD",
   "pre-submission check", "run the rubric over this", or when handed a draft plus a
   criteria sheet. Refines an EXISTING draft - it never generates an assignment,
-  and it flags anything needing the author's own position or evidence rather
-  than inventing it.
-argument-hint: "[document] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3] [--format both] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill]"
+  never invents a source, statistic, quotation or page number, and logs every
+  passage it writes verbatim so the AI-use declaration is accurate.
+argument-hint: "[document|folder] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3|unlimited] [--format both] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill] [--no-writeback]"
 allowed-tools:
   - Read
   - Write
@@ -38,22 +38,33 @@ rounds, then clears the mechanical failures that sink otherwise-strong submissio
 
 ## What this is, and what it is not
 
-**Markpilot refines a draft you have already written. It does not write one.**
+**Markpilot refines a draft you have already written. It never invents evidence.**
 
 It needs an existing document at Step 0 and stops if there is none — there is no "generate
 the assignment" path anywhere in this pipeline, by design. What it does is close the gap
 between a draft and the rubric it will be marked against: find where a criterion is not
 met, say so specifically, and tighten what is already there.
 
-The line it will not cross: where closing a gap would need **a position the author has not
-taken, evidence they have not gathered, or a source they have not read**, it flags that as
-author-input-required and moves on. It does not supply the argument. Step 2c says this
-plainly and every fix pass is bound by it, because the difference between refining someone's
-work and writing it for them is exactly that line.
+**There are two lines, and they are not the same line.**
 
-It also will not invent a source, a statistic, a quote or a page number; will not adjust a
-data point to tidy a chart; and will not help conceal AI use where a declaration is
-required. Those are not configurable.
+The one that bends: where a criterion can be closed by argument, synthesis or structure
+built from material **already in the document**, the fix pass may write it. Every such
+passage is logged verbatim in `authored.md`, marked in the document, counted on the
+`AUTHORED` row, and carried into the Step 8 declaration. Writing is permitted here because
+it is accounted for — remove the accounting and it is not the same act.
+
+The one that does not bend: where closing a gap would need **evidence the author has not
+gathered or a source they have not read**, it is flagged author-input-required and left
+open, and the criterion is reported short. It will not invent a source, a statistic, a
+quotation or a page number; will not adjust a data point to tidy a chart; and will not help
+conceal AI use where a declaration is required. No flag, no target and no number of rounds
+changes any of that.
+
+The distinction matters because the two feel identical from inside a fix pass. Writing "the
+literature diverges on whether X drives Y" from two papers the draft already cites is
+editing. Writing "a 2019 survey found X" when no such survey is in the document is
+fabrication, and it is the one defect here that a marker treats as misconduct rather than a
+lost mark.
 
 Used as intended, the AI assistance here is drafting-and-editing support of the kind most
 institutions permit **and require you to declare** — which is what Step 8 is for. Whether
@@ -80,15 +91,16 @@ The grade gate comes first because it is the only step that changes the substanc
 steps after it are mechanical, and fixing them does not move a rubric criterion.
 
 ```
-0  Intake            document, criteria sheet, task sheet, and the edit path
+0  Intake            discover.py finds the draft, the rubric and the task sheet
 1  Constraints       extract every hard rule the task sheet states
-2  GRADE GATE        independent graders -> fix -> fresh graders -> loop
-3  References        cross-match, RESOLVE every link and DOI, check quotes, format
+2  GRADE GATE        independent graders -> fix -> fresh graders -> loop to target
+3  References        cross-match, verify every source, check quotes, format
 4  Word count        against the stated rule and its stated exclusions
-5  Figures           numbering, cross-refs, charts that look pasted from a notebook
+5  Presentation      figures, tables, styling, and whether the template was used
 6  Humanise          the humanizer skill under the clamp, or inline and said so
 7  Re-verify         humanising changed the prose AND the count - check both again
-8  AI declaration    comply with the task sheet's policy
+8  AI declaration    comply with the policy, listing what the agent wrote
+8b Write back        docxpatch puts the accumulated fixes into the real document
 9  Report            what passed, what you changed, what is still on the user
 ```
 
@@ -124,6 +136,18 @@ failing — see the Step 3 gate.
 
 ## Step 0 — Intake
 
+**If you were given a folder rather than three files, find them:**
+
+```bash
+python scripts/discover.py FOLDER --json .markpilot/inputs.json
+```
+
+It identifies the draft, the rubric and the task sheet from what is *inside* each file
+rather than from its name, and compares the offering each one claims. Exit `1` means
+something is missing or the inputs disagree about the semester — read the problems it
+prints before going further. Do not override its pick silently; if it is wrong, say which
+file is which and why, so the misclassification is visible rather than buried.
+
 You need three things, plus one preference. **Ask in a single AskUserQuestion call** —
 one call carrying several questions, not several calls. Do not ask them one at a time
 across separate turns.
@@ -147,7 +171,7 @@ On the rounds options:
 - **3** — the default. Diminishing returns beyond it in practice.
 - **Until it clears (max 6)** — the cap is not arbitrary. **Scores can go down**: a fix that
   closes one criterion can open another, so "keep going until it clears" is not monotonic
-  and can oscillate. Keep the best-scoring draft (Step 2d) and stop at 6 regardless,
+  and can oscillate. Keep the best-scoring draft (Step 2d) and stop on convergence,
   reporting the best round rather than the last.
 - **0** — behaves as `--report-only`: findings, no edits.
 
@@ -346,12 +370,12 @@ Work the gaps by `weight × band-gap`, highest cost first.
 
 - Fix the substance before the sentences. A criterion sitting low because the analysis
   is descriptive is not fixed by better wording.
-- Preserve the author's voice and argument. Where closing a gap needs a position they
-  have not taken, evidence they have not gathered, or a source they have not read,
-  **do not invent it** — flag it as author-input-required and move on. This is the line
-  between refining the author's work and writing it for them, and it is not negotiable by
-  flag or by how close the score is to the target.
-- Never invent a source, statistic, quote or page number.
+- Preserve the author's voice. Where closing a gap needs **evidence they have not gathered
+  or a source they have not read**, do not invent it — flag it as author-input-required and
+  move on. Where it needs an argument that can be built from what is already on the page,
+  write it, log it verbatim in `authored.md`, and mark it `"authored": true`. See the
+  authorship ledger below; the distinction between those two cases is the whole design.
+- Never invent a source, statistic, quote or page number. No flag makes that declarable.
 - **Never introduce a claim the document's own sources do not support.** This is a
   separate rule from the one above and it is the one that actually gets broken. Inventing a
   *source* feels like cheating and is easy to avoid; inventing a *synthesis* — "these two
@@ -374,21 +398,40 @@ Work the gaps by `weight × band-gap`, highest cost first.
   next rule checkable instead of aspirational.
 - Under `--report-only`, produce the change list and stop.
 
-### The authorship ceiling — this is the enforcement, not the prose above
+### The authorship ledger — this is the enforcement, not the prose above
 
 Tightening someone's sentence and writing their argument are both "edits", and an edit
 count cannot tell them apart. So:
 
 1. **Track net words authored** across all rounds: additions minus deletions, from
    `changes.md`. Carry it into the Step 9 `AUTHORED` row, which is mandatory.
-2. **At +150 net words, stop and ask.** Use AskUserQuestion: show which criteria the new
-   material closed and what it says, and let the author accept it, rewrite it themselves,
-   or drop it. Do not resume adding until they answer.
-3. **A criterion flagged author-input-required stays flagged.** Later rounds may not
-   quietly close it by writing the missing position. If the author has not supplied it,
-   it is still open at Step 9 and the score is reported with that criterion short.
-4. **If the reported score depends on agent-written material, say so in the report** —
-   name the criteria concerned on the `AUTHORED` row.
+2. **Every agent-written passage is recorded verbatim**, with the criterion it closed, in
+   `.markpilot/<doc>/authored.md`. Not a count, not a summary — the actual sentences, so
+   the author can read exactly what they would be submitting under their own name.
+3. **`authored.md` is an input to Step 8, not an appendix to the report.** The AI-use
+   declaration is built from it. That is the whole basis on which writing is permitted
+   here: the passages are declarable because they were recorded as they were written,
+   rather than reconstructed afterwards from memory.
+4. **Passages are marked in the document too**, via `docxpatch.py --edits` with
+   `"authored": true`, so a passage cannot be quietly absorbed into the draft by an author
+   who skimmed the report.
+
+**Where the loop may write, and where it may not.** These are different rules and only the
+first is negotiable:
+
+- **May write:** argument, synthesis, evaluation and structure drawn from material already
+  in the document — its own sources, its own data, its own stated position. Flagged, logged,
+  declared.
+- **May never write:** a claim needing a source the author has not read, a statistic or
+  quotation not already present, a page number, or evidence they have not gathered. That is
+  fabrication rather than authorship, and no flag makes it declarable. It stays
+  author-input-required and the criterion is reported short.
+
+The failure this prevents is specific: Step 2a says the top band wants "an original
+position", Step 2c says close the highest-weighted gap, and the loop only stops when the
+score clears. Writing 400 words of evaluation from sources the author already cited is
+permitted here — but silently, unlogged and undeclared, it is a different act entirely.
+The ledger is what keeps the two apart.
 
 The failure this prevents is specific and easy to walk into: Step 2a tells you the top
 band wants "an original position", Step 2c tells you to close the highest-weighted gap,
@@ -407,8 +450,19 @@ fix-and-regrade cycle — so 3 rounds is up to four grading passes including the
 explicit `--rounds` on the command line overrides the interview answer; say which governed
 in the report.
 
-If the user chose **until it clears**, stop at **6** regardless and report the best round.
-The cap exists because the loop is not monotonic — see below.
+If the user chose **until it clears**, keep going until one of these, whichever comes first:
+
+1. the governing score reaches `--target`;
+2. **two consecutive rounds fail to improve the governing score** — the loop has converged,
+   and further rounds churn the text without moving the mark;
+3. every criterion still short is author-input-required, so no further editing can close
+   them and continuing would only tempt the loop across the line it must not cross;
+4. round **10**, a hard backstop.
+
+`--rounds unlimited` removes the count but **not** conditions 2, 3 and 4. That is not a
+hedge against the user's instruction: a loop with no convergence test on a non-monotonic
+score does not run forever usefully, it runs until it degrades and then keeps going. Say
+which condition stopped it, in the report.
 
 **Keep the best draft.** Save each round's document alongside its score. Scores can go
 down: a fix that closes one criterion can open another. If the final round scores lower
@@ -529,13 +583,30 @@ you could not. That count goes in the report.
 `references/referencing.md`. Fix mechanical errors. Where a fix would change what a
 citation claims, ask rather than guess.
 
-**The gate:** step 3 passes when
+**The gate:** step 3 passes when **every entry in the reference list has been verified by
+some means, and the report names which means for each.** Nothing may be left unaccounted.
+
+The three means, and they are equally good:
+
+| Means | What it establishes |
+|---|---|
+| `LIVE` from `linkcheck.py` | the URL or DOI resolves |
+| **Crossref metadata match** from `doifind.py` | the record's real title, first author and year agree with the entry — stronger than a 200, because it confirms *which* source it is |
+| **A human opened it and confirmed** | named in the report, with what was confirmed |
+
+`BLOCKED` on its own is never one of them. Concretely, the gate passes when
 
 - `citecheck.py` exits `0`; **and**
-- `linkcheck.py` exits `0`, **or** exits `2` and every non-`LIVE` item has been
-  individually opened and confirmed, each named in the report; **and**
-- the quote/statistic tally has no unchecked entries; **and**
-- the **REFERENCE COVERAGE** line accounts for every entry.
+- every entry carries one of the three verifications above; **and**
+- the quote/statistic tally has no unchecked entries.
+
+**"Every link must work" is the intent; "returns 200 to a script" is not the test.**
+Springer, Elsevier, ScienceDirect, JSTOR, Wiley and Taylor & Francis all return 403 to
+anything that is not a real browser, so a gate defined on status codes alone cannot close
+on any document citing them — and a gate that cannot close gets ignored, which is worse
+than one with a stated escape hatch that requires naming what you opened. Verified by a
+person is verified. Unverified is unverified, whatever the reason, and it is reported by
+name rather than folded into a total.
 
 The `or exits 2` clause is not a loophole — it is the only way the gate can ever close
 for a document citing Springer, Elsevier, JSTOR or Wiley, all of which return 403 to
@@ -613,9 +684,37 @@ the whole cut-and-regrade cycle at **two** passes. If the document is still over
 after the second, stop and report it as an open item with the specific sections that would
 have to lose words — an unbounded loop chasing a limit is how a working draft gets worse.
 
-## Step 5 — Figures and charts
+## Step 5 — Presentation: figures, tables, styling
 
 Skip with `--no-figures`.
+
+Run all three. They cover different things and none of them can see what the others see:
+
+```bash
+python scripts/figcheck.py   FILE --source plots.py
+python scripts/tablecheck.py FILE --json .markpilot/<doc>/tables.json
+python scripts/stylecheck.py FILE --require "<required sections from Step 1>" \
+    --font "<from Step 1>" --size <n> --spacing <n>
+```
+
+**`tablecheck` and `stylecheck` read `.docx` only, and exit `2` on anything else.** That is
+not a limitation to work around: a table is a structure and styling is metadata, so neither
+survives text extraction. Running them on `text.txt` would report a clean bill on a document
+nobody checked.
+
+What they catch that nothing else does:
+
+- A table caption **below** the table, where APA 7, Harvard and Chicago all want it above.
+  Invisible to the author, because it looks deliberate either way.
+- Rows with fewer cells than the header, from a merge or a deletion. In extracted text a
+  ragged row and a complete one are identical.
+- Headings that were **hand-bolded rather than styled**. On screen and in extracted text
+  this is indistinguishable from a properly styled document, and a rubric that scores use
+  of a provided template is scoring exactly this.
+- Required sections that are simply absent.
+
+Report them against the rubric, not as tidiness. If the criteria sheet has a presentation
+or mechanics criterion, these findings belong to it and are worth naming there.
 
 ```bash
 python scripts/figcheck.py FILE --source analysis.py notebook.ipynb
@@ -758,9 +857,57 @@ Find the policy in the task sheet or course profile and quote it verbatim.
 | **Permitted, must be cited** | Cite the tool as a source (APA 7 has a form; see `references/referencing.md`). |
 | **No policy found** | Say no policy was found, name where you looked, recommend checking the course profile. Do not assume permission. |
 
+**Build the declaration from `authored.md`, not from memory.** If the loop wrote anything,
+the declaration must say so specifically — which sections, closing which criteria, and how
+many net words — because that file recorded each passage as it was written. A declaration
+assembled afterwards from recollection is a guess about your own document, and it will be
+wrong in the direction that flatters it.
+
+Where the loop wrote material and the policy is **AI prohibited**, say that plainly and
+prominently: the document now contains agent-written prose, it cannot be submitted as it
+stands under that policy, and `authored.md` lists exactly what to remove or rewrite.
+
 **Markpilot helps you declare AI use. It does not help you hide it.** If a declaration
 is required, the finishing passes here — humanising in particular — are not a substitute
 for making one, and the report must say so. That line is not negotiable by flag.
+
+## Step 8b — Write back into the document
+
+**This is the step that makes every number above describe the file the user submits.**
+
+Up to here the loop has been editing `.markpilot/<doc>/draft-round-N.txt`, because
+Write/Edit cannot modify a `.docx`. Skipping this step leaves the user holding a score for
+a text file they do not submit and a document that has not changed — and the higher the
+score, the more misleading that is.
+
+Skip only when the source is `.md`/`.txt`/`.html`, where the loop edited the real file all
+along, or under `--report-only`.
+
+```bash
+python scripts/docxpatch.py FILE --edits .markpilot/<doc>/edits.json --dry   # look first
+python scripts/docxpatch.py FILE --edits .markpilot/<doc>/edits.json
+```
+
+Build `edits.json` from `changes.md` as a list of `{"old", "new", "why", "authored"}`.
+Rules:
+
+- **Quote enough context to be unique.** `docxpatch` replaces the first match in the
+  document; a two-word `old` will find the wrong paragraph. Include the surrounding
+  sentence.
+- **Run `--dry` first, always**, and read what it reports as unreachable. An edit that
+  cannot be located is reported, never silently skipped.
+- **Mark agent-written passages `"authored": true`**, so the ledger and the document agree.
+- It writes `<name>.markpilot-backup.docx` before the first change, verifies the rewritten
+  archive reopens and that every edit survived, and only then replaces the original. If any
+  of that fails it writes nothing and exits `2`.
+
+**Then re-run the mechanical checks on the patched file** — the word count at minimum, plus
+`citecheck` if any reference changed. An edit that lands differently from how it read in
+plain text is exactly what this step exists to catch, and the report's numbers must come
+from the real document.
+
+Anything `docxpatch` could not apply goes in the report as an ordered find/replace list for
+the user, under `STILL ON YOU`. Do not describe it as applied.
 
 ## Step 9 — Report
 
@@ -790,8 +937,11 @@ LINKS      16/18 LIVE · 0 dead · 0 mismatched          linkcheck exit 2 (2 BLO
            REFERENCE COVERAGE 18/18 entries carried an identifier
 DOIS       0 missing · 0 year questions · 0 conflicts                doifind exit 0
 QUOTES     7 quotes + 4 statistics · 11/11 checked against source       by hand
-FIGURES    3 figures · 1 table · numbered, captioned, cross-referenced  figcheck exit 1
+FIGURES    3 figures · numbered, captioned, cross-referenced           figcheck exit 1
            2 charts were pure library default → corrected code in changes.md
+TABLES     4 tables · numbered, captions above, all cross-referenced  tablecheck exit 0
+STYLE      Calibri 11pt, 1.5 spacing, 36 styled headings              stylecheck exit 1
+           2 headings hand-formatted rather than styled; template scored at 5%
 PROSE      humanised via /humanizer · 12 tells removed
            regression grader: 3/4 criteria re-confirmed at baseline band;
            `evidence` dropped D→C, the two sentences carrying it restored
@@ -799,7 +949,8 @@ AI POLICY  declaration required (task sheet §4) → drafted, on the coversheet
 
 AUTHORED   +64 / -121 net words across 2 rounds (author-written: the rest)
            new material closed: `analysis` (one added paragraph, §3.2)
-           nothing exceeded the +150 ceiling; no criterion closed for the author
+           every passage recorded verbatim in authored.md and declared at Step 8
+           author-input-required, NOT written: `evidence` needs a source not in the draft
 CHANGED    <n> edits, logged in .markpilot/<doc>/changes.md
 WRITTEN    <full path to report.docx>
            <full path to report.pdf>
@@ -975,6 +1126,8 @@ time if they decline.
 | `--report-only` | change nothing at any step; findings only |
 | `--quick` | one grader (hostile second marker stance). Report says "indicative only"; the gate is not cleared |
 | `--no-humanise` | skip step 6 and step 7's regression grade. The word count in step 7 still re-runs if step 4 changed anything |
+| `--rounds unlimited` | loop until the target, or convergence, or round 10. Never removes the convergence stops |
+| `--no-writeback` | skip step 8b. The report then describes extracted text, and must say so |
 | `--no-figures` | skip step 5 |
 | `--link-timeout N` | seconds per fetch, passed to `linkcheck --timeout` (default 20) |
 | `--budget FILE` | per-section word budget for step 4. Takes precedence over the budget written from step 1 |

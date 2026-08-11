@@ -436,3 +436,44 @@ added there is another way to corrupt a submission the day before it is due. It 
 the rewritten archive reopens and every edit survived before replacing the original, and
 writes a `.markpilot-backup.docx` first.
 
+### The loop reaches the document, and the authorship rule became a ledger
+
+The pipeline described a fix-and-regrade loop that, on the format almost every assignment
+uses, could not touch the document it was grading. Three things changed together.
+
+**Intake.** `discover.py` takes a folder and works out which file is the draft, the rubric
+and the task sheet, from content rather than filenames, and compares the offering each one
+claims. Naming three files by hand was the step where a new user stalled.
+
+**Presentation.** Step 5 grew `tablecheck.py` and `stylecheck.py`. A table is a structure
+and styling is metadata, so neither survives text extraction, and both are separately
+marked by real rubrics. On the first document they were pointed at: ten tables, not one
+numbered caption, which is a concrete reason for an Appendices band that three independent
+graders had all awarded without naming.
+
+**Write-back.** New Step 8b runs `docxpatch.py` over the accumulated edits and re-verifies
+the counts against the patched file, so the reported score describes the document the user
+submits rather than a text file they do not have.
+
+**The authorship rule changed shape, deliberately.** It was: stop at +150 net words and ask.
+It is now a ledger. Where a criterion can be closed from material already in the document,
+the loop may write it — and every such passage is logged verbatim in `authored.md` with the
+criterion it closed, marked in the document, counted on the `AUTHORED` row, and used to
+build the Step 8 declaration rather than being reconstructed from memory afterwards.
+
+What did **not** change is the rule that actually protects the user: no invented source,
+statistic, quotation or page number, ever. Those stay author-input-required and the
+criterion is reported short. The two feel identical from inside a fix pass, which is why
+they are now stated as separate rules rather than one.
+
+The link gate was restated to match how verification actually works: an entry passes when
+it resolves, **or** Crossref metadata matches the entry, **or** a human opened it and said
+so in the report. `BLOCKED` alone never passes. A gate defined on HTTP status alone cannot
+close on any document citing Springer, Elsevier, JSTOR or Wiley, and a gate that cannot
+close gets ignored.
+
+`--rounds unlimited` exists now, and keeps three stops it cannot remove: two rounds without
+improvement, every remaining criterion being author-input-required, and a hard backstop at
+round 10. A loop with no convergence test on a non-monotonic score does not run forever
+usefully; it runs until it degrades and then keeps going.
+
