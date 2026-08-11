@@ -22,7 +22,7 @@ numbering, prose humanising, and the task sheet's AI-use policy.
 >
 > That accounting is enforced, not asserted. Every change records its word delta. Every
 > agent-written passage is logged **verbatim** in `authored.md` with the criterion it
-> closed, marked in the document itself, and carried into the Step 8 AI-use declaration —
+> closed, and carried into the Step 8 AI-use declaration —
 > which is built from that file rather than from recollection. The report carries a
 > mandatory `AUTHORED` row naming both what was written and what was left unwritten because
 > only the author could supply it.
@@ -57,7 +57,7 @@ than what was attempted. `BLOCKED` links are never folded into the verified coun
 Clone into your Claude Code skills directory:
 
 ```bash
-git clone https://github.com/<you>/markpilot ~/.claude/skills/markpilot
+git clone https://github.com/nfras4/markpilot ~/.claude/skills/markpilot
 ```
 
 Then in Claude Code:

@@ -187,8 +187,21 @@ def apply_to_paragraph(para_body, old, new):
     return para_body, True
 
 
+def count_matches(xml, old):
+    """How many times `old` appears across the document's paragraph texts.
+
+    Replacing the first match is only safe if there IS only one. A proposal with
+    repeated boilerplate - "Client-facing:", a repeated table header, a sentence
+    reused in an appendix - gives several, and patching the first silently edits the
+    wrong section while reporting success. Anything other than exactly one is
+    refused."""
+    return sum(visible_text(m.group(2)).count(old) for m in PARA_RE.finditer(xml))
+
+
 def patch_xml(xml, old, new):
-    """(xml, count) - replaces the first occurrence, paragraph by paragraph."""
+    """(xml, count) - replaces the first occurrence, paragraph by paragraph.
+
+    Callers must establish uniqueness first via count_matches(); this does not."""
     out, last, count = [], 0, 0
     for m in PARA_RE.finditer(xml):
         if count:
@@ -261,27 +274,64 @@ def main():
               file=sys.stderr)
         return 2
 
-    applied, failed = [], []
+    # PHASE 1 - validate every edit against the UNTOUCHED document before changing
+    # anything. Editing is all-or-nothing: a document carrying some of the fixes is
+    # neither the graded version nor the original, and its reported score describes
+    # neither. Half-applied is the one outcome worse than not applying at all.
+    ok, failed = [], []
+    seen = []
     for e in edits:
-        old, new = e.get("old", ""), e.get("new", "")
+        old, new, why = e.get("old", ""), e.get("new", ""), e.get("why") or ""
+        label = why or old[:48] or "(no 'old' given)"
         if not old:
-            failed.append((e.get("why", "?"), "no 'old' given"))
+            failed.append((label, "no 'old' text given"))
             continue
-        xml, n = patch_xml(xml, old, new)
-        if n == 1:
-            applied.append(e)
+        n = count_matches(xml, old)
+        if n == 0:
+            failed.append((label, "not found in any paragraph"))
+        elif n > 1:
+            failed.append((label, f"AMBIGUOUS: {n} matches - quote more surrounding "
+                                  f"text so exactly one paragraph is identified"))
         else:
-            failed.append((e.get("why") or old[:48], "not found in any paragraph"))
+            # Overlapping edits corrupt each other: the first rewrites text the second
+            # is still looking for, so the second silently misses or lands wrong.
+            clash = next((p for p in seen if old in p or p in old), None)
+            if clash:
+                failed.append((label, f"overlaps another edit ({clash[:40]!r})"))
+            else:
+                seen.append(old)
+                ok.append(e)
 
-    for e in applied:
+    for e in ok:
         mark = "  [AUTHORED]" if e.get("authored") else ""
-        print(f"  + {e.get('why') or e['old'][:60]}{mark}")
+        print(f"  + {e.get('why') or e['old'][:60]}   (1 match){mark}")
     for why, reason in failed:
         print(f"  ! {why} - {reason}", file=sys.stderr)
 
+    if failed:
+        print(f"\nNOTHING WRITTEN - {len(failed)} of {len(edits)} edits could not be "
+              f"applied safely.\nFix or remove them and re-run; the document is "
+              f"unchanged.", file=sys.stderr)
+        return 1
+
     if args.dry:
-        print(f"\ndry run: {len(applied)} would apply, {len(failed)} would not")
-        return 1 if failed else 0
+        print(f"\ndry run: all {len(ok)} edits resolve to exactly one match each")
+        return 0
+
+    # PHASE 2 - apply. Each is re-counted immediately before its turn, so an earlier
+    # edit that changed the text under a later one is caught rather than assumed.
+    applied = []
+    for e in ok:
+        if count_matches(xml, e["old"]) != 1:
+            print(f"  ! {e.get('why') or e['old'][:48]} - an earlier edit changed this "
+                  f"text; nothing written", file=sys.stderr)
+            return 1
+        xml, n = patch_xml(xml, e["old"], e["new"])
+        if n != 1:
+            print(f"  ! {e.get('why') or e['old'][:48]} - failed to apply; nothing "
+                  f"written", file=sys.stderr)
+            return 1
+        applied.append(e)
 
     if applied:
         if not args.no_backup:

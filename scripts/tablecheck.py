@@ -32,10 +32,24 @@ document, because it looks deliberate either way.
 
 import argparse
 import json
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+
+def ensure_parent(path):
+    """Create the directory an output file is about to be written into.
+
+    The skill's own first prescribed command writes `.markpilot/inputs.json` into a
+    directory nothing had created, which raised an uncaught FileNotFoundError while
+    the process still exited 0 - a caller gating on the exit code saw success and got
+    no file. Every script that accepts an output path creates its parent."""
+    d = os.path.dirname(os.path.abspath(path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    return path
+
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -224,7 +238,7 @@ def main():
         print("  COULD NOT CHECK - no tables found in this document.")
         print("  That is a pass only if the document is meant to have none.")
         if args.json_out:
-            with open(args.json_out, "w", encoding="utf-8") as f:
+            with open(ensure_parent(args.json_out), "w", encoding="utf-8") as f:
                 json.dump({"tables": [], "problems": []}, f, indent=2)
         return 2
 
@@ -243,7 +257,7 @@ def main():
         print("\n  OK - numbered, captioned, cross-referenced, no ragged rows")
 
     if args.json_out:
-        with open(args.json_out, "w", encoding="utf-8") as f:
+        with open(ensure_parent(args.json_out), "w", encoding="utf-8") as f:
             json.dump({"tables": tables, "problems": problems}, f, indent=2)
     return 1 if problems else 0
 

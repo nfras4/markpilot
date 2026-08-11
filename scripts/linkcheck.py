@@ -47,6 +47,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from doctext import load, norm, die  # noqa: E402
 from citecheck import split_sections, ref_entries, author_matches  # noqa: E402
 
+def ensure_parent(path):
+    """Create the directory an output file is about to be written into.
+
+    The skill's own first prescribed command writes `.markpilot/inputs.json` into a
+    directory nothing had created, which raised an uncaught FileNotFoundError while
+    the process still exited 0 - a caller gating on the exit code saw success and got
+    no file. Every script that accepts an output path creates its parent."""
+    d = os.path.dirname(os.path.abspath(path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    return path
+
+
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
@@ -268,7 +281,7 @@ def check_doi(doi, context, timeout, msg=None):
 
     # Strip DOIs and URLs before the year test: DOI suffixes routinely embed a
     # year (10.1016/j.jbankfin.2020.105842), so a wrong year passed silently.
-    ctx = re.sub(r"(?i)https?://\S+|10\.\d{4,9}/\S+", " ", norm(context)).lower()
+    ctx = re.sub(r"(?i)https?://\S+|\b10\.\d{4,9}/\S+", " ", norm(context)).lower()
     problems = []
     if not author_matches(msg, context):
         who = first or "(no author on record)"
@@ -448,7 +461,7 @@ def main():
         print("  Bot-blocked and paywalled links are NOT verified. Do not report them as passing.")
 
     if args.json_out:
-        with open(args.json_out, "w", encoding="utf-8") as f:
+        with open(ensure_parent(args.json_out), "w", encoding="utf-8") as f:
             json.dump({"coverage": {"entries_with_identifier": coverage[0],
                                     "reference_entries": coverage[1]},
                        "results": results}, f, indent=2)

@@ -58,6 +58,19 @@ import subprocess
 import sys
 import urllib.parse
 
+def ensure_parent(path):
+    """Create the directory an output file is about to be written into.
+
+    The skill's own first prescribed command writes `.markpilot/inputs.json` into a
+    directory nothing had created, which raised an uncaught FileNotFoundError while
+    the process still exited 0 - a caller gating on the exit code saw success and got
+    no file. Every script that accepts an output path creates its parent."""
+    d = os.path.dirname(os.path.abspath(path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    return path
+
+
 STATE_DIR = (os.environ.get("MARKPILOT_HOME")
              or os.path.join(os.path.expanduser("~"), ".markpilot"))
 STATE = os.path.join(STATE_DIR, "state.json")
@@ -469,7 +482,7 @@ def main():
             recs = [p for p in (public_record(r) for r in read_ledger()) if p]
         text = json.dumps(recs, indent=2, ensure_ascii=False)
         if args.out:
-            with open(args.out, "w", encoding="utf-8") as f:
+            with open(ensure_parent(args.out), "w", encoding="utf-8") as f:
                 f.write(text + "\n")
             print(f"{len(recs)} publishable entr{'y' if len(recs) == 1 else 'ies'} "
                   f"-> {args.out}")

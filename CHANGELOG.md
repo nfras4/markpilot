@@ -477,3 +477,46 @@ improvement, every remaining criterion being author-input-required, and a hard b
 round 10. A loop with no convergence test on a non-monotonic score does not run forever
 usefully; it runs until it degrades and then keeps going.
 
+### Review round: two corrupted regexes, a broken exit contract, and a patcher that could edit the wrong paragraph
+
+An external review found defects across the shipped scripts. The ones fixed here are the
+correctness failures; each was reproduced before being touched.
+
+**Two literal U+0008 backspace characters had replaced `` in shipped regexes.** Invisible
+in an editor, and neither broke a test, because both failed in the direction that stays
+quiet.
+
+- `linkcheck.py` strips DOIs out of the context before testing the publication year,
+  precisely because DOI suffixes embed years. With the boundary corrupted nothing was
+  stripped, so a year sitting inside the DOI satisfied the check and a wrong year passed as
+  verified. Demonstrated on a real entry: `10.1016/j.intmar.2013.12.002` belongs to a 2014
+  paper and leaked `2013`. The comment describing the fix was still in place; only the code
+  had stopped doing it.
+- `citecheck.py`'s `n.d.` branch could never fire, so it was dead code. Its test passed
+  anyway, because `return a, (y or "nd")` defaults to the same answer — which also means a
+  reference with **no year at all** is still indistinguishable from a genuine `n.d.` entry.
+
+**The exit-code contract was not being kept by the two scripts the pipeline trusts most.**
+`doctext.py` printed `-> OVER` on an over-limit document and exited `0`; `citecheck.py`
+printed `FORMAT SMELLS` and exited `0`, because the smells were counted for display and
+then discarded. Every gate keyed on those zeroes.
+
+**No script created the directory it was about to write into.** The skill's own first
+prescribed command writes `.markpilot/inputs.json`, which raised an uncaught
+`FileNotFoundError` while the process still exited `0` — a caller gating on the exit code
+saw success and got no file.
+
+**`docxpatch.py` replaced the first match without proving it was the only one**, so a
+phrase repeated in an appendix silently edited the wrong section and reported success. It
+also wrote the edits that succeeded when others failed, leaving a document that was neither
+the graded version nor the original. It now validates every edit against the untouched
+document first, refuses anything with zero or more than one match, rejects overlapping
+edits, and applies all or nothing.
+
+**The claim that authored passages are marked inside the Word document was false** —
+`"authored": true` only tags the patch log. The claim is removed from `SKILL.md` and the
+README rather than being quietly left to imply an annotation that does not exist.
+
+Also: the frontmatter description was 1,043 characters against a portable limit of 1,024,
+and the README still shipped a `<you>` placeholder in its install command.
+

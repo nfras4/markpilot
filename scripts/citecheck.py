@@ -227,7 +227,7 @@ def ref_key(entry):
                 continue
             y = tok
             break
-        if not y and re.search(r"n\.\s?d\.?", entry, re.I):
+        if not y and re.search(r"\bn\.\s?d\.?", entry, re.I):
             y = "nd"
     y = re.sub(r"[^0-9a-z]", "", y.lower())
     return a, (y or "nd")
@@ -552,6 +552,11 @@ def main():
 
     smells = style_smells(entries, args.style)
     if smells:
+        # A format defect is a problem the user must fix, so it belongs in the
+        # exit code. These were printed and then discarded, so citecheck exited 0
+        # on a document it had just told you was wrong, and every gate keyed on
+        # that 0.
+        findings += len(smells)
         print(f"\n  FORMAT SMELLS  ({len(smells)} entries)")
         for i, e, ss in smells:
             print(f"    [{i}] {e}")

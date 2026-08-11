@@ -29,6 +29,19 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pdfwrite  # noqa: E402
 
+def ensure_parent(path):
+    """Create the directory an output file is about to be written into.
+
+    The skill's own first prescribed command writes `.markpilot/inputs.json` into a
+    directory nothing had created, which raised an uncaught FileNotFoundError while
+    the process still exited 0 - a caller gating on the exit code saw success and got
+    no file. Every script that accepts an output path creates its parent."""
+    d = os.path.dirname(os.path.abspath(path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    return path
+
+
 W = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
 
 
@@ -304,7 +317,7 @@ def to_html(blocks, path, title):
                 cell = "th" if i == 0 else "td"
                 rows.append("<tr>" + "".join(f"<{cell}>{il_html(c)}</{cell}>" for c in row) + "</tr>")
             b.append("<table>" + "".join(rows) + "</table>")
-    with open(path, "w", encoding="utf-8") as f:
+    with open(ensure_parent(path), "w", encoding="utf-8") as f:
         f.write(f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
                 f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
                 f"<title>{html_mod.escape(title)}</title><style>{CSS}</style></head>"

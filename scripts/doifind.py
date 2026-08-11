@@ -41,7 +41,21 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from doctext import load, norm, die  # noqa: E402
 from citecheck import (split_sections, ref_entries, ref_key,  # noqa: E402
+
                        author_matches)
+
+def ensure_parent(path):
+    """Create the directory an output file is about to be written into.
+
+    The skill's own first prescribed command writes `.markpilot/inputs.json` into a
+    directory nothing had created, which raised an uncaught FileNotFoundError while
+    the process still exited 0 - a caller gating on the exit code saw success and got
+    no file. Every script that accepts an output path creates its parent."""
+    d = os.path.dirname(os.path.abspath(path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    return path
+
 
 UA = "markpilot/1.0 (+https://github.com/nfras4/markpilot)"
 DOI_IN = re.compile(r"(?i)\b10\.\d{4,9}/[^\s<>\"'\]\),;]+")
@@ -356,7 +370,7 @@ def main():
     print("\n  Nothing here is applied automatically. Check each one against the source.")
 
     if args.json_out:
-        with open(args.json_out, "w", encoding="utf-8") as f:
+        with open(ensure_parent(args.json_out), "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
         print(f"\n  wrote {args.json_out}")
 

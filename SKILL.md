@@ -1,19 +1,16 @@
 ---
 name: markpilot
 description: |
-  Pre-submission gate for an assignment, report, or graded piece of work. Grades the
-  draft against the criteria sheet using independent agents, fixes what falls short,
-  and re-grades with fresh graders, up to a set number of rounds, aiming to clear 95%.
-  Then it runs the finishing passes: reference cross-matching, resolving every link
-  and DOI to confirm the source is real and is the one cited, reference format, word
-  count against the stated rule, figure numbering and charts that still look like
-  untouched library output, humanising the prose, and complying with the task sheet's
-  AI-use policy. Trigger on: "markpilot", "mark this", "grade this against the
+  Pre-submission gate for graded written work. Grades a draft against the criteria
+  sheet using independent agents, fixes what falls short, re-grades with fresh
+  graders, then runs the finishing passes: reference cross-matching, resolving every
+  link and DOI, word count, figures, tables, document styling, prose humanising and
+  the AI-use policy. Trigger on: "markpilot", "mark this", "grade this against the
   rubric", "is this ready to submit", "check this assignment", "will this get an HD",
-  "pre-submission check", "run the rubric over this", or when handed a draft plus a
-  criteria sheet. Refines an EXISTING draft - it never generates an assignment,
-  never invents a source, statistic, quotation or page number, and logs every
-  passage it writes verbatim so the AI-use declaration is accurate.
+  "pre-submission check", or when handed a draft plus a criteria sheet. Refines an
+  EXISTING draft - it never generates an assignment, never invents a source,
+  statistic, quotation or page number, and logs every passage it writes so the
+  AI-use declaration is accurate.
 argument-hint: "[document|folder] [--criteria FILE] [--task FILE] [--style apa7] [--target 95] [--rounds 3|unlimited] [--format both] [--source plots.py] [--budget FILE] [--report-only] [--quick] [--no-humanise] [--no-figures] [--no-backfill] [--no-writeback]"
 allowed-tools:
   - Read
@@ -49,8 +46,8 @@ met, say so specifically, and tighten what is already there.
 
 The one that bends: where a criterion can be closed by argument, synthesis or structure
 built from material **already in the document**, the fix pass may write it. Every such
-passage is logged verbatim in `authored.md`, marked in the document, counted on the
-`AUTHORED` row, and carried into the Step 8 declaration. Writing is permitted here because
+passage is logged verbatim in `authored.md`, counted on the `AUTHORED` row, and carried
+into the Step 8 declaration. Writing is permitted here because
 it is accounted for — remove the accounting and it is not the same act.
 
 The one that does not bend: where closing a gap would need **evidence the author has not
@@ -412,9 +409,11 @@ count cannot tell them apart. So:
    declaration is built from it. That is the whole basis on which writing is permitted
    here: the passages are declarable because they were recorded as they were written,
    rather than reconstructed afterwards from memory.
-4. **Passages are marked in the document too**, via `docxpatch.py --edits` with
-   `"authored": true`, so a passage cannot be quietly absorbed into the draft by an author
-   who skimmed the report.
+4. **`"authored": true` in `edits.json` tags the edit in `docxpatch`'s output**, so the
+   patch log and the ledger agree. It does **not** mark the passage inside the Word
+   document — no highlight, no comment, no content control. Do not tell the user their
+   document is annotated. Locating the passages means reading `authored.md` beside the
+   draft, and the report must say so.
 
 **Where the loop may write, and where it may not.** These are different rules and only the
 first is negotiable:

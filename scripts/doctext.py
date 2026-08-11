@@ -660,6 +660,7 @@ def main():
     paras = load(args.file)
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+    problems = 0
     if args.text or not (args.outline or args.count or args.budget):
         for p in paras:
             if p.text.strip():
@@ -718,6 +719,8 @@ def main():
             hi = int(args.limit * (1 + args.tolerance / 100))
             pct = 100.0 * counted / args.limit
             verdict = "WITHIN" if lo <= counted <= hi else ("UNDER" if counted < lo else "OVER")
+            if verdict == "OVER":
+                problems += 1
             tol = f" (+/-{args.tolerance:g}% = {lo:,}-{hi:,})" if args.tolerance else ""
             print(f"\n  Limit {args.limit:,}{tol}")
             print(f"  -> {verdict}  ({pct:.1f}% of limit, {counted - args.limit:+,} vs stated)")
@@ -734,8 +737,15 @@ def main():
             die(f"error: no such budget file: {args.budget}")
         # The budget gets its own tolerance. Reusing --tolerance (which is about the
         # overall limit) silently retuned the per-section check.
-        section_report(paras, parse_budget(args.budget), args.budget_tolerance, args)
-    return 0
+        problems += section_report(paras, parse_budget(args.budget),
+                                   args.budget_tolerance, args)
+
+    # A word limit that is exceeded is a PROBLEM, and the shared contract says a
+    # problem exits 1. This returned 0 while printing "-> OVER", so any caller
+    # gating on the exit code treated an over-limit document as clean - which is
+    # exactly the failure the exit-code contract exists to prevent, committed by
+    # the script the rest of the pipeline trusts most.
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":

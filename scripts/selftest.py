@@ -13,6 +13,7 @@ Exits non-zero on failure.
 
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,10 +22,12 @@ import urllib.parse  # noqa: E402
 from testimonial import (  # noqa: E402
     share_url, form_url, public_record, record, URL_BUDGET)
 from docxpatch import (  # noqa: E402
-    minimal_edit, apply_to_paragraph, visible_text, para_runs)
+    minimal_edit, apply_to_paragraph, visible_text, para_runs,
+    count_matches as dp_count)
 from tablecheck import analyse as tc_analyse  # noqa: E402
 from stylecheck import analyse as sc_analyse  # noqa: E402
 from discover import score as disc_score, offering as disc_offering  # noqa: E402
+from linkcheck import check_doi  # noqa: E402
 from citecheck import intext_authordate, ref_key, ENTRY_START  # noqa: E402
 from doctext import (is_caption_line, strip_intext, words, REFS_RE,  # noqa: E402
                      looks_like_reference)
@@ -499,11 +502,57 @@ def main():
         fails.append(("discover", "offering parsed from content",
                       disc_offering("RBUS3900 Semester 2, 2026"), "Semester 2, 2026"))
 
+    # Two literal U+0008 backspace characters had replaced \b in shipped regexes.
+    # Both were invisible in an editor and neither broke a test, because each failed
+    # in the direction that stays quiet.
+    #
+    # linkcheck: the year check strips DOIs from the context first, precisely because
+    # DOI suffixes embed years (10.1016/j.jbankfin.2020.105842). With \b corrupted,
+    # nothing was stripped, so a year sitting inside the DOI satisfied the check and a
+    # wrong publication year passed as verified. The comment describing the fix was
+    # still there; only the code had stopped doing it.
+    _msg = {"title": ["A paper"], "issued": {"date-parts": [[2020]]},
+            "author": [{"family": "Smith"}], "container-title": ["A Journal"]}
+    _entry = "Smith, J. (1998). A paper. A Journal. https://doi.org/10.1016/j.x.2020.123"
+    _status, _detail, _meta = check_doi("10.1016/j.x.2020.123", _entry, 5, msg=_msg)
+    if _status == "LIVE":
+        fails.append(("linkcheck", "a year inside the DOI must not satisfy the year check",
+                      _status, "not LIVE"))
+
+    # citecheck: the n.d. branch could never fire, so it was dead code. It passed its
+    # test anyway because `return a, (y or "nd")` defaults to the same answer.
+    import citecheck as _cc
+    if chr(8) in open(_cc.__file__, encoding="utf-8").read():
+        fails.append(("citecheck", "no control characters in source", "U+0008", "none"))
+    _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "linkcheck.py"), encoding="utf-8").read()
+    if chr(8) in _src:
+        fails.append(("linkcheck", "no control characters in source", "U+0008", "none"))
+    # The branch itself, exercised directly rather than through the fallback.
+    if not re.search(r"\bn\.\s?d\.?", "Wilson, K. (n.d.). Title.", re.I):
+        fails.append(("citecheck", "n.d. branch pattern matches a real entry",
+                      "no match", "match"))
+
+    # docxpatch had replaced the FIRST match without proving it was the only one, so
+    # a phrase repeated in an appendix silently edited the wrong section and reported
+    # success. It also wrote the edits that did apply when others failed, leaving a
+    # document that was neither the graded version nor the original.
+    _dup = ("<w:p><w:r><w:t>Client-facing: one</w:t></w:r></w:p>"
+            "<w:p><w:r><w:t>Client-facing: two</w:t></w:r></w:p>")
+    if dp_count(_dup, "Client-facing:") != 2:
+        fails.append(("docxpatch", "counts every match, not just the first",
+                      dp_count(_dup, "Client-facing:"), 2))
+    if dp_count(_dup, "one") != 1:
+        fails.append(("docxpatch", "a unique phrase counts once",
+                      dp_count(_dup, "one"), 1))
+    if dp_count(_dup, "absent phrase") != 0:
+        fails.append(("docxpatch", "an absent phrase counts zero", "non-zero", 0))
+
     fails.extend(e2e.run())
 
     total = (len(INTEXT) + len(REFS) + len(CAPTIONS) + len(REFS_HEADINGS)
              + len(INTEXT_STRIP) + len(ENTRY_STARTS) + len(CORPORATE_CASES)
-             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 33)
+             + len(CORP2) + len(AUTHOR_CASES) + len(LOOKS_REF) + e2e.total() + 40)
     print(f"markpilot selftest: {total - len(fails)}/{total} pass")
     for kind, src, got, exp in fails:
         print(f"  FAIL [{kind}] {src[:60]!r}")
